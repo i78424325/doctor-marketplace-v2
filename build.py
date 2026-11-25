@@ -4,14 +4,21 @@ content/ — всё, что правится в админке /admin: конт�
 src/     — шаблоны, стили, скрипты и иконки. Результат — site/ (готовые страницы для GitHub Pages или любого хостинга).
 Стили и иконки вшиваются в каждую страницу, поэтому на старте нет лишних запросов. Только стандартная библиотека Python 3.9+.
 Адрес сайта: переменные окружения SITE_BASE и SITE_URL (по умолчанию копия на GitHub Pages; для своего домена SITE_BASE=/)."""
-import html, json, os, pathlib, re, shutil, time
+import html, json, os, pathlib, re, shutil, sys, time, unicodedata, urllib.parse
 
 P = pathlib.Path(__file__).resolve().parent
 SRC, OUT, C = P / 'src', P / 'site', P / 'content'
 BASE = os.environ.get('SITE_BASE', '/doctor-marketplace-v2/')
 SITE = os.environ.get('SITE_URL', 'https://i78424325.github.io').rstrip('/') + BASE
 VER = time.strftime('%m%d%H%M')
-esc = html.escape
+INDEX = os.environ.get('SITE_INDEX') == '1'  # 1 — открыть сайт поисковикам (когда переедет на свой домен)
+
+def esc(s):
+    """Экранирование для HTML. Фигурные скобки тоже: текст из админки никогда не станет шаблонным тегом {{…}}."""
+    return html.escape('' if s is None else str(s)).replace('{', '&#123;')
+
+def warn(msg):
+    print('ВНИМАНИЕ: ' + msg, file=sys.stderr)
 
 icons = {}
 for f in (SRC / 'icons').glob('*.svg'):
@@ -41,7 +48,8 @@ def jload(rel):
 RU = dict(zip('абвгдеёжзийклмнопрстуфхцчшщъыьэюя',
               'a b v g d e e zh z i i k l m n o p r s t u f h ts ch sh sch _ y _ e yu ya'.split()))
 def slugify(s):
-    s = ''.join(RU.get(ch, ch) for ch in str(s or '').lower()).replace('_', '')
+    s = unicodedata.normalize('NFC', str(s or '')).lower()  # имена файлов на macOS бывают в разложенном виде
+    s = ''.join(RU.get(ch, ch) for ch in s).replace('_', '')
     return re.sub(r'[^a-z0-9]+', '-', s).strip('-')
 
 def num(x, default=99):
@@ -59,7 +67,8 @@ def entries(folder):
             out.append(d)
     return out
 
-def uniq(items, taken=()):
+def uniq(items, taken=(), what='Страница'):
+    """Адреса не должны совпадать: занятый получает -2, -3… и предупреждение в журнале сборки."""
     seen = set(taken)
     for it in items:
         base, n = it['slug'] or 'page', 2
@@ -67,11 +76,27 @@ def uniq(items, taken=()):
         while it['slug'] in seen:
             it['slug'] = '%s-%d' % (base, n)
             n += 1
+        if it['slug'] != base:
+            warn('%s «%s»: адрес «%s» уже занят, взят «%s»' % (what, it.get('title', ''), base, it['slug']))
         seen.add(it['slug'])
     return items
 
 S, HOME, TX = jload('settings.json'), jload('home.json'), jload('texts.json')
-SERVICES = [dict(s, slug=slugify(s['slug'])) for s in jload('services.json').get('services', []) if s.get('slug') and s.get('title')]
+
+def msg_url(u, host):
+    """Ссылка на бота или аккаунт: «@name», «t.me/name» → полная https-ссылка."""
+    u = str(u or '').strip()
+    if not u:
+        return ''
+    if u.startswith('@'):
+        return 'https://%s/%s' % (host, u[1:])
+    if re.match(r'^https?://', u, re.I):
+        return re.sub(r'^http://', 'https://', u, flags=re.I)
+    return 'https://' + u.lstrip('/')
+for _k, _host in (('telegram_url', 't.me'), ('manager_telegram_url', 't.me'), ('max_url', 'max.ru'), ('manager_max_url', 'max.ru')):
+    S[_k] = msg_url(S.get(_k), _host)
+
+SERVICES = uniq([dict(s, slug=slugify(s.get('slug') or s['title']) or 'usluga') for s in jload('services.json').get('services', []) if s.get('title')], what='Услуга')
 BY_SLUG = {s['slug']: s for s in SERVICES}
 FAQ = [i for i in jload('faq.json').get('items', []) if i.get('q')]
 STATS = [i for i in jload('stats.json').get('items', []) if i.get('value')]
@@ -79,89 +104,143 @@ STEPS = jload('steps.json')
 CLIENTS = jload('clients.json')
 DOCS = uniq(sorted(({'slug': slugify(d.get('url') or d['_file']), 'title': d.get('title') or d['_file'], 'order': num(d.get('order')),
                      'body': d.get('body', '')} for d in entries('docs')), key=lambda d: (d['order'], d['title'])))
-NEWS = uniq(sorted(({'slug': slugify(d.get('url') or re.sub(r'^\d{4}-\d{2}-\d{2}-?', '', d['_file']) or d.get('title')),
-                     'title': d.get('title') or 'Новость', 'date': str(d.get('date') or '')[:10], 'excerpt': d.get('excerpt', ''),
-                     'cover': d.get('cover', ''), 'video': d.get('video', ''), 'body': d.get('body', '')} for d in entries('news')),
-                   key=lambda n: n['date'], reverse=True))
+# старые новости сохраняют адрес, у новой с тем же заголовком будет -2: ссылки, которыми уже поделились, не меняются
+NEWS = list(reversed(uniq(sorted(({'slug': slugify(d.get('url') or re.sub(r'^\d{4}-\d{2}-\d{2}-?', '', d['_file']) or d.get('title')),
+                                   'title': d.get('title') or 'Новость', 'date': str(d.get('date') or '')[:10], 'excerpt': d.get('excerpt') or '',
+                                   'cover': d.get('cover') or '', 'video': d.get('video') or '', 'body': d.get('body') or ''} for d in entries('news')),
+                                 key=lambda n: (n['date'], n['slug'])), what='Новость')))
 RESERVED = {'uslugi', 'sait', 'o-nas', 'voprosy', 'kontakty', 'novosti', 'dokumenty', 'brief', 'admin', 'img', 'js', 'fonts'}
-PAGES = uniq([dict(p, slug=slugify(p.get('url') or p['_file'])) for p in entries('pages')], taken=RESERVED)
+# у копии страницы (A/B) адрес остаётся за оригиналом: первым идёт файл, чьё имя совпадает с адресом
+PAGES = sorted((dict(p, slug=slugify(p.get('url') or p['_file'])) for p in entries('pages')), key=lambda p: (slugify(p['_file']) != p['slug'], p['_file']))
+PAGES = uniq(PAGES, taken=RESERVED, what='Страница')
 COMPANY = S.get('company_name') or 'Доктор Маркетплейс'
 
 # ---------- ссылки, медиа, мини-Markdown ----------
 def media(u):
     """Файл из админки (img/uploads/…) → путь от корня сайта; внешние ссылки как есть."""
     u = str(u or '').strip()
-    if not u or re.match(r'^(https?:)?//', u) or u.startswith('data:'):
+    if not u or re.match(r'^(https?:)?//', u, re.I) or u.startswith('data:'):
         return u
-    return BASE + u.lstrip('/')
+    return BASE + urllib.parse.quote(u.lstrip('/'), safe="/%-._~!$&'()*+,;=:@")  # пробелы и кириллица в имени файла
 
-def href(u, fallback='{{base}}kontakty/'):
+def href(u, fallback=None):
+    """Ссылка из админки → рабочий адрес: внешние как есть (https:// допишем сами), телефон → tel:, остальное — страницы сайта."""
     u = str(u or '').strip()
     if not u:
-        return fallback
-    if re.match(r'^(https?:|mailto:|tel:|#)', u):
+        return BASE + 'kontakty/' if fallback is None else fallback
+    if re.match(r'^(https?:|mailto:|tel:|#)', u, re.I):
         return u
-    return '{{base}}' + u.lstrip('/')
+    if re.match(r'^\+?[\d\s()-]{10,}$', u):
+        return 'tel:' + re.sub(r'[^\d+]', '', u)
+    if not u.startswith('/') and re.match(r'^(www\.|[a-zа-я0-9-]+(\.[a-zа-я0-9-]+)*\.(ru|рф|com|net|org|me|io|su|pro|online|shop|store|info|biz|app|dev)(/|$))', u, re.I):
+        return 'https://' + u
+    return BASE + u.lstrip('/')
 
 def link_tag(u, label):
-    ext = bool(re.match(r'^https?:', u))
-    return '<a href="%s"%s>%s</a>' % (esc(href(u, '#')), ' target="_blank" rel="noopener"' if ext else '', label)
+    url = href(u, '#')
+    ext = bool(re.match(r'^https?:', url, re.I))
+    return '<a href="%s"%s>%s</a>' % (esc(url), ' target="_blank" rel="noopener"' if ext else '', label)
 
 def inline(s):
-    s = esc(s)
-    s = re.sub(r'!\[([^\]]*)\]\(([^)\s]+)[^)]*\)', lambda m: '<img src="%s" alt="%s" loading="lazy" decoding="async">' % (esc(media(html.unescape(m.group(2)))), m.group(1)), s)
-    s = re.sub(r'\[([^\]]+)\]\(([^)\s]+)[^)]*\)', lambda m: link_tag(html.unescape(m.group(2)), m.group(1)), s)
+    """Строка из редактора → HTML. Адреса ссылок и картинок прячем до разметки, чтобы курсив и жирный их не задели."""
+    keep, urls = [], []
+    def hold(x):
+        keep.append(x)
+        return '\x00%d\x00' % (len(keep) - 1)
+    def hold_url(m):
+        urls.append(m.group(1).strip().strip('<>').strip())
+        return '](\x01%d\x01)' % (len(urls) - 1)
+    s = str(s or '')
+    s = re.sub(r'\\([\\`*_{}\[\]()#+\-.!|<>~])', lambda m: hold(esc(m.group(1))), s)  # \* → *
+    s = re.sub(r'`([^`]+)`', lambda m: hold('<code>%s</code>' % esc(m.group(1))), s)
+    s = re.sub(r'\]\(\s*(<[^>]*>|[^)\s]+)(?:\s+"[^"]*")?\s*\)', hold_url, s)
+    s = esc(s).replace('&amp;nbsp;', '&nbsp;')
     s = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', s)
-    return re.sub(r'(?<![\w*])[*_](?![\s*_])(.+?)(?<![\s*_])[*_](?![\w*])', r'<em>\1</em>', s)
+    s = re.sub(r'~~(.+?)~~', r'<s>\1</s>', s)
+    s = re.sub(r'(?<![\w*])[*_](?![\s*_])(.+?)(?<![\s*_])[*_](?![\w*])', r'<em>\1</em>', s)
+    s = re.sub(r'!\[([^\]]*)\]\(\x01(\d+)\x01\)', lambda m: '<img src="%s" alt="%s" loading="lazy" decoding="async">' % (
+        esc(media(urls[int(m.group(2))])), re.sub(r'<[^>]+>', '', m.group(1))), s)
+    s = re.sub(r'\[([^\]]+)\]\(\x01(\d+)\x01\)', lambda m: link_tag(urls[int(m.group(2))], m.group(1)), s)
+    s = re.sub(r'\x01(\d+)\x01', lambda m: esc(urls[int(m.group(1))]), s)
+    return re.sub(r'\x00(\d+)\x00', lambda m: keep[int(m.group(1))], s)
 
 def md(text):
-    """Текст из редактора админки → HTML: заголовки, абзацы, списки, цитаты, жирный, ссылки, картинки."""
-    out, buf, items, kind, start = [], [], [], None, 1
-    def flush():
-        nonlocal buf, items, kind, start
-        if buf:
-            parts = []
-            for raw in buf:
-                hard = raw.endswith('  ') or raw.rstrip().endswith('\\')
-                parts.append(inline(raw.strip().rstrip('\\').strip()) + ('<br>' if hard else ' '))
-            out.append('<p>%s</p>' % ''.join(parts).strip())
-            buf = []
+    """Текст из редактора админки → HTML: заголовки, абзацы (Shift+Enter — перенос строки), списки, цитаты, код, жирный, ссылки, картинки."""
+    out, para, items, quote = [], [], [], []
+    st = {'kind': None, 'start': 1}
+    def flush_p():
+        if para:
+            out.append('<p>%s</p>' % '<br>'.join(inline(l.strip().rstrip('\\').strip()) for l in para))
+            del para[:]
+    def flush_list():
         if items:
-            attr = ' start="%d"' % start if kind == 'ol' and start != 1 else ''
-            out.append('<%s%s>%s</%s>' % (kind, attr, ''.join('<li>%s</li>' % inline(i) for i in items), kind))
-            items, kind = [], None
+            attr = ' start="%d"' % st['start'] if st['kind'] == 'ol' and st['start'] != 1 else ''
+            out.append('<%s%s>%s</%s>' % (st['kind'], attr, ''.join('<li>%s</li>' % inline(i) for i in items), st['kind']))
+            del items[:]
+        st['kind'] = None
+    def flush_quote():
+        if quote:
+            groups, cur = [], []
+            for q in quote + ['']:
+                if q:
+                    cur.append(q)
+                elif cur:
+                    groups.append(cur)
+                    cur = []
+            if groups:
+                out.append('<blockquote>%s</blockquote>' % ''.join('<p>%s</p>' % '<br>'.join(inline(x) for x in g) for g in groups))
+            del quote[:]
+    def flush():
+        flush_p(); flush_list(); flush_quote()
+    code = None
     for raw in str(text or '').replace('\r\n', '\n').split('\n'):
         s = raw.strip()
+        if code is not None:
+            if s.startswith('```'):
+                out.append('<pre><code>%s</code></pre>' % esc('\n'.join(code)))
+                code = None
+            else:
+                code.append(raw)
+            continue
+        if s.startswith('```'):
+            flush()
+            code = []
+            continue
+        if s.startswith('>'):
+            flush_p(); flush_list()
+            quote.append(s[1:].strip())
+            continue
+        flush_quote()
         if not s:
             flush()
             continue
-        m = re.match(r'^(#{1,4})\s+(.*)$', s)
+        m = re.match(r'^(#{1,6})\s+(.*)$', s)
         if m:
             flush()
-            lvl = {1: 2, 2: 2, 3: 3, 4: 4}[len(m.group(1))]
-            out.append('<h%d>%s</h%d>' % (lvl, inline(m.group(2)), lvl))
+            lvl = {1: 2, 2: 2, 3: 3}.get(len(m.group(1)), 4)
+            out.append('<h%d>%s</h%d>' % (lvl, inline(m.group(2).rstrip('#').strip()), lvl))
             continue
-        if re.match(r'^(-{3,}|\*{3,})$', s):
+        if re.match(r'^(-{3,}|\*{3,}|_{3,})$', s):
             flush()
             out.append('<hr>')
             continue
-        if s.startswith('>'):
-            flush()
-            out.append('<blockquote><p>%s</p></blockquote>' % inline(s.lstrip('> ')))
-            continue
-        m = re.match(r'^[-*+•]\s+(.*)$', s) or re.match(r'^(\d+)[.)]\s+(.*)$', s)
+        m, k = re.match(r'^[-*+•]\s+(.*)$', s), 'ul'
+        if not m:
+            m, k = re.match(r'^(\d+)[.)]\s+(.*)$', s), 'ol'
         if m:
-            k = 'ol' if m.re.pattern.startswith('^(\\d') else 'ul'
-            if buf or (kind and kind != k):
-                flush()
+            flush_p()
+            if st['kind'] and st['kind'] != k:
+                flush_list()
             if not items and k == 'ol':
-                start = int(m.group(1))
-            kind = k
+                st['start'] = int(m.group(1))
+            st['kind'] = k
             items.append(m.group(m.lastindex))
             continue
         if items:
-            flush()
-        buf.append(raw)
+            flush_list()
+        para.append(raw)
+    if code is not None:
+        out.append('<pre><code>%s</code></pre>' % esc('\n'.join(code)))
     flush()
     return '\n'.join(out)
 
@@ -170,26 +249,41 @@ def accent(s):
     return re.sub(r'\*([^*]+)\*', r'<em>\1</em>', esc(s or ''))
 
 def video_html(url, poster='', autoplay=False):
-    """Видео: файл mp4/webm из админки или ссылка VK Видео / Rutube / YouTube → плеер."""
+    """Видео: файл mp4/webm из админки, ссылка или код вставки VK Видео / Rutube / YouTube → плеер.
+    Незнакомая ссылка — кнопка «Смотреть видео»: чужие сайты обычно запрещают показывать себя во фрейме."""
     url = str(url or '').strip()
     if not url:
         return ''
-    if re.search(r'\.(mp4|webm|mov|m4v)(\?|$)', url, re.I) or not re.match(r'^https?://', url):
+    m = re.search(r'<iframe[^>]+src="([^"]+)"', url, re.I)  # вставили код из «Поделиться → Код для вставки»
+    if m:
+        url = html.unescape(m.group(1))
+    if url.startswith('//'):
+        url = 'https:' + url
+    if re.search(r'\.(mp4|webm|mov|m4v)(\?|#|$)', url, re.I) or not re.match(r'^https?://', url, re.I):
         return '<video controls playsinline preload="%s"%s%s src="%s"></video>' % (
             'auto' if autoplay else 'none', ' autoplay' if autoplay else '', ' poster="%s"' % esc(media(poster)) if poster else '', esc(media(url)))
-    m = re.search(r'rutube\.ru/(?:video|shorts|play/embed)/([0-9a-f]{32})', url)
+    src = ''
+    m = re.search(r'rutube\.ru/(?:video/(?:private/)?|shorts/|play/embed/)([0-9a-f]{32})', url, re.I)
     if m:
-        url = 'https://rutube.ru/play/embed/' + m.group(1)
-    m = re.search(r'(?:vk\.com|vkvideo\.ru|vk\.ru)/(?:video|clip)(-?\d+)_(\d+)', url)
-    if m:
-        url = 'https://vk.com/video_ext.php?oid=%s&id=%s&hd=2%s' % (m.group(1), m.group(2), '&autoplay=1' if autoplay else '')
-    m = re.search(r'(?:youtu\.be/|youtube\.com/(?:watch\?v=|shorts/|embed/))([\w-]{11})', url)
-    if m:
-        url = 'https://www.youtube-nocookie.com/embed/%s%s' % (m.group(1), '?autoplay=1' if autoplay else '')
-    return ('<iframe src="%s" title="Видео" loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock" allowfullscreen></iframe>' % esc(url))
+        src = 'https://rutube.ru/play/embed/' + m.group(1)
+    elif re.search(r'(vk\.com|vk\.ru|vkvideo\.ru)/video_ext\.php\?', url, re.I):
+        src = url + ('&autoplay=1' if autoplay and 'autoplay=' not in url else '')
+    else:
+        m = re.search(r'(?:vk\.com|vkvideo\.ru|vk\.ru)/\S*?(?:video|clip)(-?\d+)_(\d+)', url, re.I)
+        if m:
+            h = re.search(r'[?&]hash=([0-9a-f]+)', url)
+            src = 'https://vk.com/video_ext.php?oid=%s&id=%s&hd=2%s%s' % (m.group(1), m.group(2), '&hash=' + h.group(1) if h else '', '&autoplay=1' if autoplay else '')
+        else:
+            m = re.search(r'(?:youtube\.com/\S*?[?&]v=|youtu\.be/|youtube(?:-nocookie)?\.com/(?:shorts|embed|live)/)([\w-]{11})', url, re.I)
+            if m:
+                src = 'https://www.youtube-nocookie.com/embed/%s%s' % (m.group(1), '?autoplay=1' if autoplay else '')
+    if not src:
+        return '<a class="video-link" href="%s" target="_blank" rel="noopener">{{icon:play}}<span>Смотреть видео</span></a>' % esc(url)
+    return ('<iframe src="%s" title="Видео" loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock" allowfullscreen></iframe>' % esc(src))
 
 def price_html(s, cls='price'):
     p = str(s.get('price_from') or '').strip()
+    p = re.sub(r'\s*(₽|руб(\.|лей)?|р\.)$', '', re.sub(r'^от\s*', '', p, flags=re.I), flags=re.I).strip()  # «от 15000 ₽» → 15000
     if p:
         p = re.sub(r'(?<=\d)(?=(\d{3})+(?!\d))', '&nbsp;', re.sub(r'\s+', '', p)) if re.fullmatch(r'[\d\s]+', p) else esc(p)
         return '<span class="%s">от <b>%s&nbsp;₽</b></span>' % (cls, p)
@@ -230,9 +324,15 @@ def bento_html():
                       '' if slug == 'sait' else price_html(s), VIZ.get(slug, '')))
     return ''.join(out)
 
+def answer_html(a):
+    """Ответ в вопросах — это HTML (можно ссылки). Пустая строка — новый абзац, перенос — новая строка; {{base}} — адрес сайта."""
+    a = str(a or '').replace('\r\n', '\n').replace('{{base}}', BASE).replace('{', '&#123;')
+    parts = [p.strip() for p in re.split(r'\n\s*\n', a) if p.strip()]
+    return ''.join('<p>%s</p>' % p.replace('\n', '<br>') for p in parts) or '<p></p>'
+
 def faq_html(items):
-    return ''.join('<details><summary>%s<span class="pm">{{icon:plus}}</span></summary><div class="ans"><p>%s</p></div></details>'
-                   % (esc(i['q']), i.get('a', '')) for i in items)
+    return ''.join('<details><summary>%s<span class="pm">{{icon:plus}}</span></summary><div class="ans">%s</div></details>'
+                   % (esc(i['q']), answer_html(i.get('a'))) for i in items)
 
 def steps_html(items, compact=False):
     line = '' if compact else '<div class="steps-line" aria-hidden="true"><i></i></div>'
@@ -263,7 +363,7 @@ def clients_html():
     if logos:
         def one(l):
             img = '<img src="%s" alt="%s" loading="lazy" decoding="async">' % (esc(media(l['image'])), esc(l.get('name', '')))
-            return '<li>%s</li>' % (('<a href="%s" target="_blank" rel="noopener">%s</a>' % (esc(l['url']), img)) if l.get('url') else img)
+            return '<li>%s</li>' % (('<a href="%s" target="_blank" rel="noopener">%s</a>' % (esc(href(l['url'], '#')), img)) if l.get('url') else img)
         items = ''.join(one(l) for l in logos)
         while len(logos) < 6 and items.count('<li>') < 6:  # строка должна заполнять ширину экрана
             items += ''.join(one(l) for l in logos)
@@ -279,7 +379,7 @@ def who_html():
         out.append('<article class="card" data-reveal style="--d:%dms"><span class="n">%s</span><h3 class="heading-6">%s</h3><ul class="checks">%s</ul>%s</article>'
                    % (k * 80, esc(w.get('label', '')), accent(w.get('title', '')),
                       ''.join('<li>{{icon:check-circle}}<span>%s</span></li>' % esc(t) for t in w.get('items') or []),
-                      '<a class="link-arrow link-acc" href="%s"><span>%s</span>{{icon:arrow-right}}</a>' % (esc(href(w.get('link'), '{{base}}uslugi/')), esc(w['link_text'])) if w.get('link_text') else ''))
+                      '<a class="link-arrow link-acc" href="%s"><span>%s</span>{{icon:arrow-right}}</a>' % (esc(href(w.get('link'), BASE + 'uslugi/')), esc(w['link_text'])) if w.get('link_text') else ''))
     return ''.join(out)
 
 F = HOME.get('founder') or {}
@@ -326,9 +426,16 @@ def video_card():
                 % (' has-poster' if poster else '', cap, body, video_html(url, poster, autoplay=True)))
     return '<div class="vcard vcard-soon" role="img" aria-label="%s — скоро">%s<span class="vsoon">Скоро здесь</span></div>' % (cap, body)
 
+DOC_SLUGS = {d['slug'] for d in DOCS}
+def doc_url(slug):
+    if slug in DOC_SLUGS:
+        return BASE + 'dokumenty/%s/' % slug
+    warn('нет документа «%s» — ссылка у галочки согласия ведёт на список документов' % slug)
+    return BASE + 'dokumenty/'
+
 def consents(prefix):
-    return ('<label class="check"><input type="checkbox" id="%s-pd" name="consent_pd" required><span class="box">{{icon:check}}</span><span>Согласен на <a href="{{base}}dokumenty/soglasie-pd/" target="_blank">обработку персональных данных</a> и принимаю <a href="{{base}}dokumenty/politika/" target="_blank">политику конфиденциальности</a> <b class="req">*</b></span></label>'
-            '<label class="check"><input type="checkbox" id="%s-ads" name="consent_ads"><span class="box">{{icon:check}}</span><span>Согласен получать <a href="{{base}}dokumenty/soglasie-reklama/" target="_blank">индивидуальные предложения</a></span></label>' % (prefix, prefix))
+    return ('<label class="check"><input type="checkbox" id="%s-pd" name="consent_pd" required><span class="box">{{icon:check}}</span><span>Согласен на <a href="%s" target="_blank">обработку персональных данных</a> и принимаю <a href="%s" target="_blank">политику конфиденциальности</a> <b class="req">*</b></span></label>'
+            '<label class="check"><input type="checkbox" id="%s-ads" name="consent_ads"><span class="box">{{icon:check}}</span><span>Согласен получать <a href="%s" target="_blank">индивидуальные предложения</a></span></label>' % (prefix, doc_url('soglasie-pd'), doc_url('politika'), prefix, doc_url('soglasie-reklama')))
 
 def cases_html(s):
     cases = [c for c in (s.get('cases') or []) if c.get('title')]
@@ -441,7 +548,16 @@ NAV = [('uslugi', 'uslugi/', 'Услуги'), ('novosti', 'novosti/', 'Ново�
        ('voprosy', 'voprosy/', 'Вопросы'), ('kontakty', 'kontakty/', 'Контакты')]
 LAYOUT = (SRC / 'layout.html').read_text(encoding='utf-8')
 WIDGETS = (SRC / 'pages' / 'widgets.html').read_text(encoding='utf-8')
-STICKY = '<div class="sticky-cta"><a class="btn btn-primary" href="{{base}}kontakty/" data-lead><span>Получить бесплатную консультацию</span></a></div>'
+STICKY = '<div class="sticky-cta"><a class="btn btn-primary" href="{{base}}kontakty/" data-lead><span>Бесплатная консультация</span>{{icon:arrow-right}}</a></div>'
+
+def chat_alt_html():
+    """Ссылки под чатом: прямо менеджеру, если его аккаунт указан в админке, иначе — запись через бота."""
+    links = []
+    for key, ch, label in (('manager_telegram_url', 'tg', 'Telegram'), ('manager_max_url', 'max', 'MAX')):
+        u = S.get(key)
+        links.append('<a href="%s" target="_blank" rel="noopener">%s</a>' % (esc(u), label) if u else
+                     '<a href="{{base}}kontakty/" data-lead data-channel="%s">%s</a>' % (ch, label))
+    return '<p class="chat-alt">Или в мессенджере: %s</p>' % ' · '.join(links)
 
 def widgets_html():
     tg, mx = S.get('telegram_url', ''), S.get('max_url', '')
@@ -449,7 +565,7 @@ def widgets_html():
     for k, v in (('{{tg-raw}}', esc(tg)), ('{{max-raw}}', esc(mx)), ('{{endpoint}}', esc(S.get('lead_endpoint', ''))),
                  ('{{mtg}}', esc(S.get('manager_telegram_url') or tg)), ('{{mmax}}', esc(S.get('manager_max_url') or mx)),
                  ('{{chat_label}}', esc(S.get('chat_label') or 'Напишите нам, мы онлайн')),
-                 ('{{chat_greeting}}', esc(S.get('chat_greeting') or 'Здравствуйте! Чем помочь вашему магазину?')),
+                 ('{{chat_greeting}}', esc(S.get('chat_greeting') or 'Здравствуйте! Чем помочь вашему магазину?')), ('{{chat-alt}}', chat_alt_html()),
                  ('{{service-options}}', OPTIONS), ('{{consents-lead}}', consents('l')), ('{{consents-chat}}', consents('c'))):
         out = out.replace(k, v)
     return out
@@ -464,7 +580,7 @@ def page(key, title, desc, body, sticky=True, scripts=('site',), head=''):
                  ('{{fnav}}', a('home', '', 'Главная', True) + ''.join(a(*n, li=True) for n in NAV) + a('sait', 'sait/', 'Сайт для селлера', True)),
                  ('{{fdocs}}', ''.join('<li><a href="{{base}}dokumenty/%s/">%s</a></li>' % (d['slug'], esc(d['title'])) for d in DOCS)),
                  ('{{footer_text}}', esc(S.get('footer_text', ''))), ('{{widgets}}', widgets_html()),
-                 ('{{tg}}', esc(href(S.get('telegram_url')))), ('{{max}}', esc(href(S.get('max_url')))),
+                 ('{{robots}}', 'index, follow' if INDEX else 'noindex, nofollow'),
                  ('{{title}}', esc(title)), ('{{desc}}', esc(desc)), ('{{head}}', head),
                  ('{{scripts}}', ''.join('<script src="{{base}}js/%s.js?v={{ver}}" defer></script>' % s for s in scripts)),
                  ('{{sticky}}', STICKY if sticky else '')):
@@ -500,6 +616,7 @@ def demos_html():
         for k, (slug, name, kind, url, sb, text, _t) in enumerate(PROJECTS[1:])) + '</div>'
 
 # ---------- сборка страниц ----------
+MEET_ICONS = ['calendar-check', 'chart-line-up', 'chats-circle', 'seal-check', 'clock']
 HP = re.split(r'<!--@section ([a-z0-9-]+)-->', (SRC / 'pages' / 'home.html').read_text(encoding='utf-8'))
 HOME_SEC = {HP[i]: HP[i + 1] for i in range(1, len(HP), 2)}
 SECTIONS = {
@@ -508,11 +625,10 @@ SECTIONS = {
     '{{founder-home}}': founder_html('<a class="btn btn-ghost" href="{{base}}o-nas/"><span>О компании</span>{{icon:arrow-right}}</a>'),
     '{{founder-about}}': founder_html('<a class="btn btn-primary btn-shine" href="{{base}}kontakty/" data-lead><span>Получить бесплатную консультацию</span>{{icon:arrow-right}}</a>'),
     '{{steps}}': steps_html(STEPS.get('items') or []), '{{site-steps}}': steps_html(STEPS.get('site') or []), '{{service-options}}': OPTIONS,
-    '{{faq-all}}': faq_html(FAQ), '{{faq-home}}': faq_html(FAQ[:6]), '{{faq-site}}': faq_html(FAQ[6:9]), '{{consents-form}}': consents('f'),
+    '{{faq-all}}': faq_html(FAQ), '{{faq-home}}': faq_html([i for i in FAQ if i.get('topic') != 'site'][:6]), '{{faq-site}}': faq_html([i for i in FAQ if i.get('topic') == 'site']), '{{consents-form}}': consents('f'),
     '{{why}}': ''.join('<div class="card" data-reveal style="--d:%dms"><span class="ic">%s</span><p>%s</p></div>' % (k * 60, icon(w.get('icon')), esc(w.get('text', '')))
                        for k, w in enumerate((TX.get('o_nas') or {}).get('why') or [])),
-    '{{meeting}}': ''.join('<li>%s<span>%s</span></li>' % (icon(ic), esc(t)) for ic, t in zip(['calendar-check', 'chart-line-up', 'chats-circle', 'seal-check', 'clock'],
-                                                                                         (TX.get('kontakty') or {}).get('meeting') or [])),
+    '{{meeting}}': ''.join('<li>%s<span>%s</span></li>' % (icon(MEET_ICONS[k % len(MEET_ICONS)]), esc(t)) for k, t in enumerate((TX.get('kontakty') or {}).get('meeting') or [])),
     '{{proj-feature}}': proj_feature_html(), '{{demos}}': demos_html(), '{{viz:sait}}': VIZ.get('sait', ''),
     '{{hero_chip}}': esc(HOME.get('hero_chip', '')), '{{hero_title}}': hero_title(), '{{hero_lead}}': esc(HOME.get('hero_lead', '')),
     '{{hero_cta}}': esc(HOME.get('hero_cta') or 'Получить бесплатную консультацию'), '{{hero-stats}}': hero_stats(), '{{video-card}}': video_card(),
@@ -534,7 +650,8 @@ home = fill(HOME_SEC['hero'] + ''.join(HOME_SEC.get(t, '') for t in order))
 parts = re.split(r'<!--@page ([a-z0-9-]+)-->', (SRC / 'pages' / 'inner.html').read_text(encoding='utf-8'))
 inner = {parts[i]: parts[i + 1] for i in range(1, len(parts), 2)}
 FAQ_LD = '<script type="application/ld+json">%s</script>' % json.dumps({'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
-    {'@type': 'Question', 'name': i['q'], 'acceptedAnswer': {'@type': 'Answer', 'text': re.sub(r'<[^>]+>', '', i.get('a', ''))}} for i in FAQ]}, ensure_ascii=False).replace('</', '<\\/')
+    {'@type': 'Question', 'name': str(i['q']), 'acceptedAnswer': {'@type': 'Answer', 'text': re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', answer_html(i.get('a'))))).strip()}}
+    for i in FAQ]}, ensure_ascii=False).replace('</', '<\\/').replace('{{', '{\\u007b')
 
 def news_post(n):
     if n['video']:
@@ -601,7 +718,7 @@ brief = tokens((SRC / 'brief' / 'index.html').read_text(encoding='utf-8')).repla
 (OUT / 'brief').mkdir()
 (OUT / 'brief' / 'index.html').write_text(brief, encoding='utf-8')
 (OUT / 'favicon.svg').write_text(MARK.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ', 1).replace(' aria-hidden="true" focusable="false"', ''), encoding='utf-8')
-(OUT / 'robots.txt').write_text('User-agent: *\nDisallow: /\n', encoding='utf-8')
+(OUT / 'robots.txt').write_text('User-agent: *\n%s\n' % ('Allow: /' if INDEX else 'Disallow: /'), encoding='utf-8')
 (OUT / '.nojekyll').write_text('', encoding='utf-8')
 sizes = sorted(((p.stat().st_size, str(p.relative_to(OUT))) for p in OUT.rglob('index.html')), reverse=True)
 print('built', VER, '→', OUT, '| страниц:', len(PAGES_OUT) + 2, '| новостей:', len(NEWS), '| документов:', len(DOCS), '| своих страниц:', len(PAGES),

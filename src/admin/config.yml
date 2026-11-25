@@ -15,6 +15,14 @@ site_url: https://i78424325.github.io/doctor-marketplace-v2/
 display_url: https://i78424325.github.io/doctor-marketplace-v2/
 media_folder: src/img/uploads
 public_folder: /img/uploads
+media_libraries:
+  default:
+    config:
+      slugify_filename: true
+field_defaults:
+  richtext:
+    buttons: [bold, italic, link, heading-two, heading-three, heading-four, quote, bulleted-list, numbered-list]
+    editor_components: [image]
 
 collections:
   # ---------- контакты, мессенджеры, видео-визитка ----------
@@ -31,13 +39,13 @@ collections:
           - { name: phone, label: 'Телефон — как показывать', widget: string, hint: 'Например: 8 931 009-10-14' }
           - { name: phone_href, label: 'Телефон для звонка', widget: string, hint: 'Только цифры с плюсом: +79310091014', pattern: ['^\+?\d{10,15}$', 'Только цифры, можно с плюсом в начале'] }
           - { name: email, label: 'Почта', widget: string }
-          - { name: telegram_url, label: 'Telegram — бот для заявок', widget: string, required: false, hint: 'Ссылка вида https://t.me/имя_бота. По ней ведут кнопки и QR-код. Пусто — ведут на страницу контактов' }
-          - { name: max_url, label: 'MAX — бот для заявок', widget: string, required: false, hint: 'Ссылка вида https://max.ru/имя_бота. Пусто — ведут на страницу контактов' }
-          - { name: manager_telegram_url, label: 'Telegram менеджера (необязательно)', widget: string, required: false }
-          - { name: manager_max_url, label: 'MAX менеджера (необязательно)', widget: string, required: false }
+          - { name: telegram_url, label: 'Telegram — бот для заявок', widget: string, required: false, hint: 'Ссылка вида https://t.me/имя_бота. По ней ведут кнопки и QR-код. Пусто — ведут на страницу контактов', pattern: ['^https://t\.me/\S+$', 'Ссылка вида https://t.me/имя_бота'] }
+          - { name: max_url, label: 'MAX — бот для заявок', widget: string, required: false, hint: 'Ссылка вида https://max.ru/имя_бота. Пусто — ведут на страницу контактов', pattern: ['^https://(web\.)?max\.ru/\S+$', 'Ссылка вида https://max.ru/имя_бота'] }
+          - { name: manager_telegram_url, label: 'Telegram менеджера (необязательно)', widget: string, required: false, pattern: ['^https://t\.me/\S+$', 'Ссылка вида https://t.me/имя_бота'] }
+          - { name: manager_max_url, label: 'MAX менеджера (необязательно)', widget: string, required: false, pattern: ['^https://(web\.)?max\.ru/\S+$', 'Ссылка вида https://max.ru/имя_бота'] }
           - { name: chat_label, label: 'Надпись на кнопке чата', widget: string, default: 'Напишите нам, мы онлайн' }
           - { name: chat_greeting, label: 'Первое сообщение в чате', widget: string }
-          - { name: video_url, label: 'Видео-визитка на главной', widget: file, required: false, hint: 'Ссылка на VK Видео, Rutube или YouTube — или файл mp4 до 50 МБ. Пусто — карточка «Скоро здесь»' }
+          - { name: video_url, label: 'Видео-визитка на главной', widget: file, required: false, hint: 'Ссылка на VK Видео, Rutube или YouTube, код вставки (iframe) — или файл mp4 до 50 МБ. Пусто — карточка «Скоро здесь»' }
           - { name: video_poster, label: 'Обложка видео', widget: image, required: false, hint: 'Кадр из видео, горизонтальный или квадратный' }
           - { name: video_caption, label: 'Подпись к видео', widget: string }
           - { name: footer_text, label: 'Текст в подвале', widget: text }
@@ -122,7 +130,7 @@ collections:
             summary: '{{fields.title}} · от {{fields.price_from}} ₽'
             fields:
               - { name: title, label: 'Название', widget: string }
-              - { name: slug, label: 'Адрес страницы латиницей', widget: string, pattern: ['^[a-z0-9-]+$', 'Только латиница, цифры и дефис'], hint: 'reklama → сайт/uslugi/reklama/. У «Сайта для селлера» — sait' }
+              - { name: slug, label: 'Адрес страницы латиницей', widget: string, pattern: ['^[a-z0-9]+(-[a-z0-9]+)*$', 'Латиница и цифры, слова через дефис: reklama-ozon'], hint: 'reklama → сайт/uslugi/reklama/. У «Сайта для селлера» — sait. Адреса услуг не должны повторяться' }
               - name: icon
                 label: Значок
                 widget: select
@@ -150,7 +158,7 @@ collections:
                   - { label: 'Галочка', value: check-circle }
               - { name: short, label: 'Короткое описание', widget: string }
               - { name: tile_text, label: 'Подпись в плитке', widget: string, required: false, hint: 'Пусто — короткое описание' }
-              - { name: price_from, label: 'Цена «от», ₽', widget: string, required: false, hint: 'Только число, например 15000. Пусто — на сайте «Цена от … ₽»' }
+              - { name: price_from, label: 'Цена «от», ₽', widget: string, required: false, hint: 'Только число, например 15000. Пусто — на сайте «Цена от … ₽»', pattern: ['^[0-9 ]*$', 'Только число, например 15000'] }
               - { name: items, label: 'Что входит', widget: list, field: { name: item, label: 'Пункт', widget: string } }
               - name: cases
                 label: Кейсы
@@ -172,7 +180,7 @@ collections:
                       - { name: label, label: 'Подпись', widget: string, hint: 'Например: выручка за 2 месяца' }
                   - { name: image, label: 'Фото', widget: image, required: false }
                   - { name: video, label: 'Видео', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
-                  - { name: text, label: 'Описание', widget: markdown, required: false }
+                  - { name: text, label: 'Описание', widget: richtext, required: false }
 
   # ---------- новости ----------
   - name: news
@@ -193,7 +201,7 @@ collections:
       - { name: excerpt, label: 'Коротко для карточки', widget: text }
       - { name: cover, label: 'Обложка', widget: image, required: false }
       - { name: video, label: 'Видео', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
-      - { name: body, label: 'Текст', widget: markdown }
+      - { name: body, label: 'Текст', widget: richtext }
       - { name: url, label: 'Адрес латиницей', widget: string, required: false, hint: 'Необязательно. Пусто — адрес сделается из заголовка' }
       - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
 
@@ -213,7 +221,7 @@ collections:
     fields:
       - { name: title, label: 'Название', widget: string }
       - { name: order, label: 'Порядок в списке', widget: number, value_type: int, default: 10 }
-      - { name: body, label: 'Текст документа', widget: markdown }
+      - { name: body, label: 'Текст документа', widget: richtext }
       - { name: url, label: 'Адрес латиницей', widget: string, required: false, hint: 'Необязательно. У согласий не менять: на них ведут галочки в формах' }
       - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
 
@@ -232,7 +240,7 @@ collections:
     summary: '{{title}} → /{{url}}/'
     fields:
       - { name: title, label: 'Название страницы', widget: string }
-      - { name: url, label: 'Адрес латиницей', widget: string, pattern: ['^[a-z0-9-]+$', 'Только латиница, цифры и дефис'], hint: 'reklama-wb → сайт/reklama-wb/' }
+      - { name: url, label: 'Адрес латиницей', widget: string, pattern: ['^(?!(uslugi|sait|o-nas|voprosy|kontakty|novosti|dokumenty|brief|admin|img|js|fonts)$)[a-z0-9]+(-[a-z0-9]+)*$', 'Латиница и цифры через дефис. Адреса разделов сайта (uslugi, novosti и т. п.) заняты'], hint: 'reklama-wb → сайт/reklama-wb/. У копии для A/B-теста сразу поменяйте адрес' }
       - { name: description, label: 'Описание для поиска и соцсетей', widget: text, required: false }
       - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
       - name: blocks
@@ -258,7 +266,7 @@ collections:
             summary: '{{fields.title}}'
             fields:
               - { name: title, label: 'Заголовок', widget: string, required: false }
-              - { name: body, label: 'Текст', widget: markdown }
+              - { name: body, label: 'Текст', widget: richtext }
           - name: image
             label: Фото
             widget: object
@@ -318,7 +326,8 @@ collections:
             summary: '{{fields.q}}'
             fields:
               - { name: q, label: 'Вопрос', widget: string }
-              - { name: a, label: 'Ответ', widget: text }
+              - { name: a, label: 'Ответ', widget: text, hint: 'Пустая строка — новый абзац' }
+              - { name: topic, label: 'Раздел', widget: select, required: false, default: general, options: [{ label: 'Общий вопрос', value: general }, { label: 'Вопрос о сайте для селлера', value: site }], hint: 'Вопросы о сайте показываются на странице «Сайт для селлера»' }
       - name: stats
         label: Цифры
         file: content/stats.json
