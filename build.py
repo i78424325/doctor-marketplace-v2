@@ -81,7 +81,24 @@ def uniq(items, taken=(), what='Страница'):
         seen.add(it['slug'])
     return items
 
-S, HOME, TX = jload('settings.json'), jload('home.json'), jload('texts.json')
+def flat_home(h):
+    """Главная в админке разбита на блоки (hero, who, …); сборщик понимает и блоки, и старый плоский вид."""
+    h = dict(h or {})
+    for grp, keys in (('hero', {'chip': 'hero_chip', 'title': 'hero_title', 'lead': 'hero_lead', 'button': 'hero_cta'}),
+                      ('who', {'chip': 'who_chip', 'title': 'who_title'}),
+                      ('services_block', {'chip': 'services_chip', 'title': 'services_title'}),
+                      ('news_block', {'chip': 'news_chip', 'title': 'news_title'})):
+        g = h.get(grp)
+        if isinstance(g, dict):
+            for k, flat in keys.items():
+                if not h.get(flat):
+                    h[flat] = g.get(k) or ''
+    if isinstance(h.get('who'), dict):
+        h['who'] = h['who'].get('cards') or []
+    return h
+
+S, HOME, TX = jload('settings.json'), flat_home(jload('home.json')), jload('texts.json')
+VIDEO = jload('video.json')
 
 def msg_url(u, host):
     """Ссылка на бота или аккаунт: «@name», «t.me/name» → полная https-ссылка."""
@@ -414,8 +431,8 @@ def hero_stats():
 
 def video_card():
     """Видео-визитка на первом экране. Пока видео нет — обложка «скоро» с фото основателя."""
-    url, poster = S.get('video_url', ''), S.get('video_poster', '')
-    cap = esc(S.get('video_caption') or 'Видео-визитка основателя')
+    url, poster = VIDEO.get('url') or S.get('video_url', ''), VIDEO.get('poster') or S.get('video_poster', '')
+    cap = esc(VIDEO.get('caption') or S.get('video_caption') or 'Видео-визитка основателя')
     who = esc('%s · %s' % (F.get('name', ''), 'основатель компании'))
     face = media(F.get('photo')) or BASE + 'img/artem.webp'
     bg = ('<img class="vc-poster" src="%s" alt="" decoding="async" fetchpriority="high">' % esc(media(poster))) if poster else \
