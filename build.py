@@ -553,7 +553,7 @@ STICKY = '<div class="sticky-cta"><a class="btn btn-primary" href="{{base}}konta
 def chat_alt_html():
     """Ссылки под чатом: прямо менеджеру, если его аккаунт указан в админке, иначе — запись через бота."""
     links = []
-    for key, ch, label in (('manager_telegram_url', 'tg', 'Telegram'), ('manager_max_url', 'max', 'MAX')):
+    for key, ch, label in (('manager_max_url', 'max', 'MAX'), ('manager_telegram_url', 'tg', 'Telegram')):
         u = S.get(key)
         links.append('<a href="%s" target="_blank" rel="noopener">%s</a>' % (esc(u), label) if u else
                      '<a href="{{base}}kontakty/" data-lead data-channel="%s">%s</a>' % (ch, label))

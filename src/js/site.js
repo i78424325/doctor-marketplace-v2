@@ -210,7 +210,7 @@
 
   /* заявка: вкладки Telegram / MAX / Телефон, две галочки, QR-код на компьютере, кнопка — на телефоне */
   var lead = $('#lead');
-  var cur = { channel: 'tg', service: '' };
+  var cur = { channel: 'form', service: '' };
   var pd = $('#l-pd'), ads = $('#l-ads');
   var tabs = lead ? $$('[role="tab"]', lead) : [];
   var qrQueue = null;
@@ -298,7 +298,7 @@
     var hidden = $('#l-service'); if (hidden) hidden.value = cur.service;
     var f = $('#lead-form'), done = f && f.parentNode.querySelector('.done');
     if (f && done && !done.hidden) { done.hidden = true; f.hidden = false; f.reset(); } // новая заявка — чистая форма
-    selectTab(t.getAttribute('data-channel') || 'tg');
+    selectTab(t.getAttribute('data-channel') || 'form'); // по умолчанию — обычная заявка по телефону
     openModal(lead);
     goal('lead_open');
   });

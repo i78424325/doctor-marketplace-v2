@@ -1,7 +1,7 @@
 <div class="dock" id="dock" data-tg="{{tg-raw}}" data-max="{{max-raw}}" data-endpoint="{{endpoint}}">
   <span class="dock-tip" id="dock-tip" aria-hidden="true">{{chat_label}}</span>
-  <a class="dock-btn dock-tg" href="{{base}}kontakty/" data-lead data-channel="tg" aria-label="Написать в Telegram">{{icon:telegram-logo}}</a>
   <a class="dock-btn dock-max" href="{{base}}kontakty/" data-lead data-channel="max" aria-label="Написать в MAX"><b>MAX</b></a>
+  <a class="dock-btn dock-tg" href="{{base}}kontakty/" data-lead data-channel="tg" aria-label="Написать в Telegram">{{icon:telegram-logo}}</a>
   <button class="dock-chat" type="button" id="chat-open" aria-controls="chat" aria-expanded="false"><span class="dock-ic">{{icon:chat-circle-dots}}<i class="dot"></i></span><span class="dock-t">{{chat_label}}</span></button>
 </div>
 
@@ -38,13 +38,13 @@
     <button class="sheet-x" type="button" data-close aria-label="Закрыть">{{icon:x}}</button>
     <span class="chip chip-accent"><i class="dot"></i>Бесплатно и без обязательств</span>
     <h2 class="heading-5" id="lead-h">Запишитесь на бесплатную консультацию</h2>
-    <p class="sheet-lead">Выберите, как удобнее: в мессенджере за пару касаний или через короткую форму.</p>
+    <p class="sheet-lead">Оставьте телефон — перезвоним и договоримся о времени. Или запишитесь в MAX и Telegram за пару касаний.</p>
     <div class="seg" role="tablist" aria-label="Способ связи">
-      <button type="button" role="tab" id="t-tg" aria-controls="p-tg" aria-selected="true" data-tab="tg">{{icon:telegram-logo}}Telegram</button>
+      <button type="button" role="tab" id="t-form" aria-controls="p-form" aria-selected="true" data-tab="form">{{icon:phone}}Телефон</button>
       <button type="button" role="tab" id="t-max" aria-controls="p-max" aria-selected="false" data-tab="max" tabindex="-1"><b class="max-mini">MAX</b>MAX</button>
-      <button type="button" role="tab" id="t-form" aria-controls="p-form" aria-selected="false" data-tab="form" tabindex="-1">{{icon:phone}}Телефон</button>
+      <button type="button" role="tab" id="t-tg" aria-controls="p-tg" aria-selected="false" data-tab="tg" tabindex="-1">{{icon:telegram-logo}}Telegram</button>
     </div>
-    <div class="pane" id="p-tg" role="tabpanel" aria-labelledby="t-tg" data-pane="tg">
+    <div class="pane" id="p-tg" role="tabpanel" aria-labelledby="t-tg" data-pane="tg" hidden>
       <div class="qr-box">
         <div class="qr" data-qr="tg" role="img" aria-label="QR-код: запись через Telegram"><span class="qr-lock">{{icon:qr-code}}Отметьте согласие ниже</span></div>
         <div class="qr-copy">
@@ -64,7 +64,7 @@
         </div>
       </div>
     </div>
-    <div class="pane" id="p-form" role="tabpanel" aria-labelledby="t-form" data-pane="form" hidden>
+    <div class="pane" id="p-form" role="tabpanel" aria-labelledby="t-form" data-pane="form">
       <form class="form form-sm" id="lead-form" data-lead-form novalidate>
         <div class="field"><label for="l-name">Как к вам обращаться <b>*</b></label><input class="inp" id="l-name" name="name" type="text" autocomplete="name" placeholder="Имя" required><p class="err" id="l-name-err" aria-live="polite"></p></div>
         <div class="field"><label for="l-contact">Телефон или ник в Телеграме <b>*</b></label><input class="inp" id="l-contact" name="contact" type="text" autocomplete="tel" placeholder="+7 900 000-00-00 или @username" required><p class="err" id="l-contact-err" aria-live="polite"></p></div>

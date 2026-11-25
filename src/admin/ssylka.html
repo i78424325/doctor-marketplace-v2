@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Ссылка для входа в админку</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#F4F3EF;--s1:#FFFFFF;--s2:#F7F6F2;--line:rgba(16,32,24,.12);--text:#121C16;--muted:#56625C;--brand:#4EB679;--ink:#0B1A12;--acc:#237A4B;--danger:#C93B3B;--gold:#8A6A2B;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/24px system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;padding-block:40px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:640px;margin:0 auto}
+.logo{display:flex;align-items:center;gap:12px;font-weight:700}
+.logo img{width:40px;height:40px;border-radius:11px}
+h1{margin:32px 0 8px;font-size:30px;line-height:36px;letter-spacing:-.02em;text-wrap:balance}
+.lead{margin:0;color:var(--muted)}
+.card{margin-top:24px;padding:24px;border-radius:24px;background:var(--s1);box-shadow:inset 0 0 0 1px var(--line),0 18px 44px -18px rgba(16,32,24,.2)}
+ol{margin:0;padding-left:20px;display:grid;gap:8px;color:var(--muted)}
+ol b{color:var(--text)}
+label{display:block;margin-top:24px;font-size:14px;line-height:20px;font-weight:600;color:var(--muted)}
+input,textarea{width:100%;margin-top:8px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:var(--s1);font:inherit;color:inherit}
+textarea{min-height:104px;resize:vertical;font-size:14px;line-height:20px;word-break:break-all}
+input:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px rgba(78,182,121,.15)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;padding:12px 20px;border:0;border-radius:9999px;background:var(--brand);color:var(--ink);font:inherit;font-weight:700;text-decoration:none;cursor:pointer;transition:transform .3s cubic-bezier(.22,1,.36,1)}
+.btn:active{transform:scale(.98)}
+.btn:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.btn.ghost{background:var(--s2);box-shadow:inset 0 0 0 1px var(--line)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.msg{margin:12px 0 0;font-size:14px;line-height:20px}
+.msg:empty{display:none}
+.msg.err{color:var(--danger)}
+.msg.ok{color:var(--acc)}
+.note{margin:16px 0 0;padding:12px 16px;border-radius:12px;background:rgba(201,162,87,.12);color:var(--gold);font-size:14px;line-height:20px}
+a{color:var(--acc)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><img src="../favicon.svg" alt="">Доктор Маркетплейс</div>
+  <h1>Ссылка для входа в админку</h1>
+  <p class="lead">Тот, кому вы отправите ссылку, откроет админку сразу — без GitHub, логинов и паролей. Браузер запомнит вход.</p>
+  <div class="card">
+    <ol>
+      <li>Создайте ключ на <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub</a>: доступ только к <b>doctor-marketplace-v2</b>, разрешение <b>Contents: Read and write</b>.</li>
+      <li>Вставьте ключ ниже. Ссылка собирается прямо в этом браузере, ключ уходит только на GitHub — для проверки.</li>
+      <li>Отправьте ссылку лично, например в Telegram.</li>
+    </ol>
+    <form id="f" autocomplete="off" novalidate>
+      <label for="k">Ключ доступа GitHub</label>
+      <input id="k" type="password" placeholder="github_pat_…" spellcheck="false" autocomplete="off">
+      <button class="btn" type="submit">Сделать ссылку</button>
+      <p class="msg" id="m" aria-live="polite"></p>
+    </form>
+    <div id="out" hidden>
+      <label for="l">Ссылка для входа</label>
+      <textarea id="l" readonly></textarea>
+      <div class="row">
+        <button class="btn" type="button" id="copy">Скопировать ссылку</button>
+        <a class="btn ghost" id="open" href="#" target="_blank" rel="noopener">Проверить вход</a>
+      </div>
+      <p class="note">Ссылка — это ключ от админки: не публикуйте её. Если она ушла не туда, удалите ключ на GitHub — ссылка сразу перестанет работать, и можно сделать новую.</p>
+    </div>
+  </div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var f = document.getElementById('f'), k = document.getElementById('k'), m = document.getElementById('m');
+  var out = document.getElementById('out'), l = document.getElementById('l'), open = document.getElementById('open');
+  var admin = location.href.replace(/[?#].*$/, '').replace(/ssylka\.html$/, '');
+  var repo = 'i78424325/doctor-marketplace-v2';
+  // имя репозитория берём из настроек админки, чтобы после переезда страница работала без правок
+  fetch('config.yml', { cache: 'no-store' }).then(function (r) { return r.text(); })
+    .then(function (t) { var x = t.match(/^\s*repo:\s*(\S+)/m); if (x) repo = x[1]; }).catch(function () {});
+  function say(text, cls) { m.textContent = text; m.className = 'msg' + (cls ? ' ' + cls : ''); }
+  function b64url(s) { return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var token = k.value.trim();
+    out.hidden = true;
+    if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(token)) { say('Это не похоже на ключ GitHub: он начинается с github_pat_.', 'err'); k.focus(); return; }
+    say('Проверяю ключ на GitHub…');
+    fetch('https://api.github.com/repos/' + repo, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' } })
+      .then(function (r) {
+        if (r.status === 401) throw new Error('Ключ не подходит или уже удалён на GitHub.');
+        if (r.status === 404) throw new Error('У ключа нет доступа к ' + repo + '. Выберите этот репозиторий при создании ключа.');
+        if (!r.ok) throw new Error('GitHub ответил ошибкой ' + r.status + '. Попробуйте ещё раз.');
+        var link = admin + '#/signin/' + b64url(JSON.stringify({ token: token }));
+        l.value = link; open.href = link; out.hidden = false; k.value = '';
+        say('Готово: ключ рабочий. Если правка в админке не сохранится — у ключа нет разрешения Contents: Read and write.', 'ok');
+      })
+      .catch(function (err) { say(err && err.message ? err.message : 'Не получилось проверить ключ. Проверьте интернет.', 'err'); });
+  });
+  document.getElementById('copy').addEventListener('click', function () {
+    var done = function () { say('Ссылка скопирована — отправьте её лично.', 'ok'); };
+    var fallback = function () { l.focus(); l.select(); try { document.execCommand('copy'); done(); } catch (e) { say('Выделите ссылку и скопируйте вручную.', 'err'); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(l.value).then(done, fallback); else fallback();
+  });
+})();
+</script>
+</body>
+</html>
