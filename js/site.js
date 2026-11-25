@@ -66,7 +66,7 @@
     if (mmenu) mmenu.inert = true;
     menuBtn.addEventListener('click', function () { setMenu(!root.classList.contains('menu-open')); });
     $$('#mmenu a').forEach(function (a) { a.addEventListener('click', function () { setMenu(false); }); });
-    var wide = w.matchMedia('(min-width:1024px)'), onWide = function (e) { if (e.matches) setMenu(false); };
+    var wide = w.matchMedia('(min-width:1024px)'), onWide = function (e) { if (e.matches && root.classList.contains('menu-open')) setMenu(false); };
     if (wide.addEventListener) wide.addEventListener('change', onWide); else if (wide.addListener) wide.addListener(onWide);
   }
 
@@ -137,14 +137,18 @@
   }
   function goal(name) { try { if (w.ym && w.DM_YM) w.ym(w.DM_YM, 'reachGoal', name); } catch (e) { /* без аналитики */ } }
 
-  /* отправка заявки: на «Адрес приёма заявок» (оттуда — в amoCRM и менеджеру); без адреса — демо */
+  /* отправка заявки: на «Адрес приёма заявок» (оттуда — в amoCRM и менеджеру); без адреса — демо.
+     text/plain — без предварительного запроса CORS, который не умеют многие простые приёмники; lead_id — защита от дублей */
+  var newId = function () { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); };
   function send(data, cb) {
+    data.lead_id = data.lead_id || newId();
     if (!cfg.endpoint) { setTimeout(function () { cb(true); }, 700); return; }
-    var fin = function (ok) { if (cb) { var f = cb; cb = null; f(ok); } };
+    var ctrl = w.AbortController ? new AbortController() : null, timer = null;
+    var fin = function (ok) { if (timer) clearTimeout(timer); if (cb) { var f = cb; cb = null; f(ok); } };
     try {
-      fetch(cfg.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+      timer = setTimeout(function () { if (ctrl) ctrl.abort(); fin(false); }, 15000);
+      fetch(cfg.endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify(data), signal: ctrl ? ctrl.signal : undefined })
         .then(function (r) { fin(r.ok); }, function () { fin(false); });
-      setTimeout(function () { fin(false); }, 15000);
     } catch (e) { fin(false); }
   }
   if (cfg.endpoint) $$('[data-demo]').forEach(function (el) { el.hidden = true; });
@@ -168,7 +172,8 @@
 
   /* ---------- окна: заявка и видео ---------- */
   var opened = null, lastFocus = null;
-  var behind = function () { return [$('header'), $('#main'), $('.footer'), $('.sticky-cta'), dock, $('#chat')].filter(Boolean); };
+  var behind = function () { return [$('.skip'), $('header'), $('#main'), $('.footer'), $('.sticky-cta'), dock, $('#chat')].filter(Boolean); };
+  var canFocus = function (el) { return !!(el && el.isConnected && !(el.closest && el.closest('[inert]')) && el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden'); };
   function openModal(m) {
     if (opened) closeModal(true);
     lastFocus = d.activeElement; opened = m; m.hidden = false;
@@ -182,7 +187,7 @@
     root.classList.remove('modal-open');
     behind().forEach(function (el) { el.inert = false; });
     if (m.id === 'vmodal') { var f = $('#vframe'); if (f) f.innerHTML = ''; }
-    if (!silent) focus(lastFocus);
+    if (!silent) focus(canFocus(lastFocus) ? lastFocus : (canFocus(menuBtn) ? menuBtn : $('#main h1')));
   }
   d.addEventListener('click', function (e) {
     var x = e.target.closest && e.target.closest('[data-close]');
@@ -195,10 +200,11 @@
       else if (root.classList.contains('menu-open')) { setMenu(false); focus(menuBtn); }
     }
     if (e.key === 'Tab' && opened) { // фокус не уходит из окна
-      var f = $$('a[href],button,input,select,textarea,[tabindex]:not([tabindex="-1"])', opened).filter(function (el) { return !el.disabled && el.offsetParent !== null; });
+      var f = $$('a[href],button,input,select,textarea,iframe,video[controls],summary,[tabindex]:not([tabindex="-1"])', opened).filter(function (el) { return !el.disabled && el.offsetParent !== null; });
       if (!f.length) return;
-      if (e.shiftKey && (d.activeElement === f[0] || !opened.contains(d.activeElement))) { e.preventDefault(); focus(f[f.length - 1]); }
-      else if (!e.shiftKey && d.activeElement === f[f.length - 1]) { e.preventDefault(); focus(f[0]); }
+      var at = f.indexOf(d.activeElement); // фокус на самом окне (не в списке) — тоже по кругу
+      if (e.shiftKey && at <= 0) { e.preventDefault(); focus(f[f.length - 1]); }
+      else if (!e.shiftKey && (at === -1 || at === f.length - 1)) { e.preventDefault(); focus(f[0]); }
     }
   });
 
@@ -208,26 +214,37 @@
   var pd = $('#l-pd'), ads = $('#l-ads');
   var tabs = lead ? $$('[role="tab"]', lead) : [];
   var qrQueue = null;
-  function loadQR(cb) {
+  var QR_SRC = ['https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js'];
+  function loadQR(cb) { // библиотека QR подгружается только когда нужна; не открылась одна сеть доставки — пробуем вторую
     if (w.qrcode) return cb();
     if (qrQueue) return qrQueue.push(cb);
     qrQueue = [cb];
-    var s = d.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
-    s.async = true;
-    s.onload = s.onerror = function () { var q = qrQueue; qrQueue = null; q.forEach(function (f) { f(); }); };
-    d.head.appendChild(s);
+    var done = function () { var q = qrQueue; qrQueue = null; q.forEach(function (f) { f(); }); };
+    (function inject(i) {
+      var s = d.createElement('script');
+      s.src = QR_SRC[i]; s.async = true; s.crossOrigin = 'anonymous';
+      s.onload = done;
+      s.onerror = function () { if (i + 1 < QR_SRC.length) inject(i + 1); else done(); };
+      d.head.appendChild(s);
+    })(0);
+  }
+  var qrSvg = function (box) { return box.querySelector(':scope > svg'); };
+  function clearQR(box) { var old = qrSvg(box); if (old) old.parentNode.removeChild(old); box.removeAttribute('data-url'); }
+  function failQR(box) {
+    box.removeAttribute('data-url'); box.classList.add('qr-fail');
+    var l = $('.qr-lock', box); if (l) l.textContent = 'QR-код не загрузился — нажмите кнопку рядом';
   }
   function drawQR(box, url) {
     if (box.getAttribute('data-url') === url) return;
     box.setAttribute('data-url', url);
     loadQR(function () {
-      if (!w.qrcode || box.getAttribute('data-url') !== url) return;
+      if (box.getAttribute('data-url') !== url) return;
+      if (!w.qrcode) { failQR(box); return; }
       try {
         var q = w.qrcode(0, 'M'); q.addData(url); q.make();
-        var old = $('svg', box); if (old) old.parentNode.removeChild(old);
+        var old = qrSvg(box); if (old) old.parentNode.removeChild(old);
         box.insertAdjacentHTML('afterbegin', q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }));
-      } catch (e) { box.removeAttribute('data-url'); }
+      } catch (e) { failQR(box); }
     });
   }
   function refreshLead() {
@@ -236,9 +253,10 @@
     ['tg', 'max'].forEach(function (ch) {
       var url = botLink(ch, cur.service);
       var go = $('[data-go="' + ch + '"]', lead);
-      if (go) { go.href = url; go.setAttribute('aria-disabled', ok ? 'false' : 'true'); }
+      // пока нет согласия, ссылка на бота не выдаётся ни кнопкой, ни QR-кодом (даже средним щелчком)
+      if (go) { go.href = ok ? url : location.origin + BASE + 'kontakty/'; go.setAttribute('aria-disabled', ok ? 'false' : 'true'); }
       var box = $('[data-qr="' + ch + '"]', lead);
-      if (box) { box.classList.toggle('locked', !ok); if (cur.channel === ch && desktop()) drawQR(box, url); }
+      if (box) { box.classList.toggle('locked', !ok); if (!ok) clearQR(box); else if (cur.channel === ch && desktop()) drawQR(box, url); }
     });
     var demo = $('[data-demo]', lead);
     if (demo) demo.hidden = !!(cfg.tg && cfg.max) || cur.channel === 'form';
@@ -289,6 +307,7 @@
   $$('[data-lead-form]').forEach(function (form) {
     var inModal = form.id === 'lead-form';
     var nameI = $('[name="name"]', form), contactI = $('[name="contact"]', form), svc = $('[name="service"]', form);
+    if (!nameI || !contactI || !$('button[type="submit"]', form)) return;
     var pdBox = inModal ? pd : $('[name="consent_pd"]', form), adsBox = inModal ? ads : $('[name="consent_ads"]', form);
     if (!inModal && svc && svc.tagName === 'SELECT') {
       var want = serviceFromPage();
@@ -301,22 +320,24 @@
     var val = function (n) { var el = $('[name="' + n + '"]', form); return el ? el.value.trim() : ''; };
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      if (form.getAttribute('data-busy')) return; // Enter во время отправки не создаёт вторую заявку
       var a = validName(nameI), b = validContact(contactI), c = !!(pdBox && pdBox.checked);
       markConsent(pdBox);
       if (!a) { focus(nameI); return; }
       if (!b) { focus(contactI); return; }
       if (!c) { focus(pdBox); return; }
       var btn = $('button[type="submit"]', form), errP = $('.form-err', form);
-      btn.classList.add('loading'); btn.setAttribute('aria-busy', 'true');
+      btn.classList.add('loading'); btn.setAttribute('aria-busy', 'true'); form.setAttribute('data-busy', '1');
       if (errP) errP.textContent = '';
+      if (!form._lid) form._lid = newId(); // повтор после сбоя — та же заявка, без дубля
       send({
-        type: 'lead', channel: 'form', name: val('name'), contact: val('contact'), store: val('store'),
+        lead_id: form._lid, type: 'lead', channel: 'form', name: val('name'), contact: val('contact'), store: val('store'),
         service: (svc && svc.value) || cur.service, comment: val('comment'), page: location.pathname,
         source: source(), campaign: mem.get('dm-camp') || '', consent_pd: true, consent_ads: !!(adsBox && adsBox.checked)
       }, function (ok) {
-        btn.classList.remove('loading'); btn.removeAttribute('aria-busy');
+        btn.classList.remove('loading'); btn.removeAttribute('aria-busy'); form.removeAttribute('data-busy');
         if (!ok) { if (errP) errP.textContent = 'Не получилось отправить заявку. Позвоните нам' + (phone ? ': ' + phone : '') + ' — или напишите в Telegram.'; return; }
-        goal('lead_form');
+        goal('lead_form'); form._lid = null;
         form.hidden = true;
         var box = form.parentNode.querySelector('.done');
         if (box) {
@@ -377,14 +398,16 @@
     if (cpd) cpd.addEventListener('change', function () { markConsent(cpd); });
     ccontact.addEventListener('submit', function (e) {
       e.preventDefault();
+      if (ccontact.getAttribute('data-busy')) return;
       var ok = validContact(cn);
       markConsent(cpd);
       if (!ok) { focus(cn); return; }
       if (!cpd.checked) { focus(cpd); return; }
-      var btn = $('button[type="submit"]', ccontact); btn.classList.add('loading');
-      send({ type: 'chat', messages: talk.sent, contact: cn.value.trim(), page: location.pathname, source: source(),
+      var btn = $('button[type="submit"]', ccontact); btn.classList.add('loading'); ccontact.setAttribute('data-busy', '1');
+      talk.lid = talk.lid || newId();
+      send({ lead_id: talk.lid, type: 'chat', messages: talk.sent, contact: cn.value.trim(), page: location.pathname, source: source(),
              campaign: mem.get('dm-camp') || '', consent_pd: true, consent_ads: !!(cads && cads.checked) }, function (sent) {
-        btn.classList.remove('loading');
+        btn.classList.remove('loading'); ccontact.removeAttribute('data-busy');
         if (!sent) { var er = $('#chat-cn-err'); if (er) er.textContent = 'Не получилось отправить. Попробуйте ещё раз или напишите нам в Telegram.'; return; }
         goal('lead_chat');
         talk.contact = cn.value.trim(); talk.step = 2;
