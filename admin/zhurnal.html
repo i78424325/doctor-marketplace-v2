@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Журнал правок и откат</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+:root{--bg:#F4F3EF;--s1:#FFFFFF;--s2:#F7F6F2;--line:rgba(16,32,24,.12);--text:#121C16;--muted:#56625C;--dim:#87918C;--brand:#4EB679;--ink:#0B1A12;--acc:#237A4B;--deep:#0F3B2A;--danger:#C93B3B;--gold:#8A6A2B;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/24px system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;padding-block:40px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:760px;margin:0 auto}
+.logo{display:flex;align-items:center;gap:12px;font-weight:700}
+.logo img{width:40px;height:40px;border-radius:11px}
+h1{margin:32px 0 8px;font-size:30px;line-height:36px;letter-spacing:-.02em;text-wrap:balance}
+.lead{margin:0;color:var(--muted)}
+.card{margin-top:24px;padding:20px 24px;border-radius:20px;background:var(--s1);box-shadow:inset 0 0 0 1px var(--line),0 18px 44px -22px rgba(16,32,24,.25)}
+.card b{display:block;font-size:18px;line-height:28px}
+.card p{margin:4px 0 0;color:var(--muted);font-size:14px;line-height:20px}
+.card .row{margin-top:12px}
+.note{margin-top:16px;padding:12px 16px;border-radius:14px;font-size:14px;line-height:20px}
+.note.ok{background:rgba(78,182,121,.14);color:var(--acc)}
+.note.err{background:rgba(201,59,59,.1);color:var(--danger)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 18px;border:0;border-radius:9999px;background:var(--brand);color:var(--ink);font:inherit;font-size:14px;line-height:20px;font-weight:700;text-decoration:none;cursor:pointer;transition:transform .3s cubic-bezier(.22,1,.36,1)}
+.btn:active{transform:scale(.98)}
+.btn:focus-visible{outline:2px solid var(--acc);outline-offset:3px}
+.btn.ghost{background:var(--s2);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.warn{background:var(--deep);color:#FFFFFF}
+.btn[disabled]{opacity:.5;cursor:default}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#list{margin-top:24px;display:grid;gap:10px}
+.item{padding:16px 20px;border-radius:18px;background:var(--s1);box-shadow:inset 0 0 0 1px var(--line)}
+.item .top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;line-height:18px;color:var(--dim)}
+.item .now{padding:2px 8px;border-radius:999px;background:rgba(78,182,121,.16);color:var(--acc);font-weight:700}
+.item .act{display:block;margin-top:4px;font-size:16px;line-height:24px}
+.item .meta{margin-top:4px;font-size:14px;line-height:20px;color:var(--muted)}
+.item .meta .who{color:var(--text);font-weight:700}
+.item .meta small{display:block;margin-top:4px;font-size:12px;line-height:16px;color:var(--dim);word-break:break-word}
+.item .actions{margin-top:12px}
+.ask{display:grid;gap:8px;padding:12px 14px;border-radius:14px;background:var(--s2);box-shadow:inset 0 0 0 1px var(--line);font-size:14px;line-height:20px}
+.skel{height:84px;border-radius:18px;background:linear-gradient(90deg,var(--s2),#ECEBE5,var(--s2));background-size:200% 100%;animation:sk 1.4s ease-in-out infinite}
+@keyframes sk{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.skel{animation:none}}
+#more{margin-top:16px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><img src="../favicon.svg" alt="">Доктор Маркетплейс</div>
+  <h1>Журнал правок и откат</h1>
+  <p class="lead">Каждое изменение сайта — кто, когда и что поменял. Любую версию можно вернуть одной кнопкой.</p>
+  <div id="state"></div>
+  <div id="flash" aria-live="polite"></div>
+  <div id="list" aria-busy="true"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+  <button class="btn ghost" id="more" type="button" hidden>Показать ещё</button>
+</main>
+<script src="journal.js?v=11251704"></script>
+<script>
+(function () {
+  'use strict';
+  var J = window.DMJournal, $ = function (s) { return document.querySelector(s); };
+  var stateBox = $('#state'), flash = $('#flash'), list = $('#list'), more = $('#more');
+  var page = 1, priv = J.privateKey(), first = true, oldFormat = false; // версии до перестройки админки (25.11) хранят тексты в другом виде
+  var NAMES = { home: 'Главная страница', services: 'Услуги, цены и кейсы', video: 'Видео-визитка', clients: 'Наши клиенты', contacts: 'Контакты и мессенджеры',
+                settings: 'Контакты и мессенджеры', faq: 'Вопросы и ответы', stats: 'Цифры', steps: 'Шаги «Как мы работаем»', texts: 'Заголовки страниц',
+                news: 'Новости и статьи', docs: 'Документы', pages: 'Новые страницы', help: 'Как пользоваться' };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var cap = function (s) { return s.charAt(0).toUpperCase() + s.slice(1); };
+  var fmt = function (d) { return new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+  function human(h) {
+    var m = h.match(/^Админка: (добавлено|изменено|удалено) «([^»]*)» \(([^)]*)\)/);
+    if (m) {
+      var what = NAMES[m[3]] || NAMES[m[2]] || m[3];
+      var item = NAMES[m[2]] || m[2] === m[3] ? '' : ' — ' + m[2];
+      return cap(m[1]) + ': ' + what + item;
+    }
+    m = h.match(/^Админка: (загружен|удалён) файл (.+)$/);
+    if (m) return cap(m[1]) + ' файл ' + m[2].split('/').pop();
+    if (/^(Откат сайта|Журнал правок)/.test(h)) return h;
+    return 'Обновление от разработчика: ' + h;
+  }
+  function say(text, ok) { flash.innerHTML = '<div class="note ' + (ok ? 'ok' : 'err') + '">' + esc(text) + '</div>'; }
+  function card(title, text, actions) { return '<div class="card"><b>' + esc(title) + '</b><p>' + esc(text) + '</p>' + (actions ? '<div class="row">' + actions + '</div>' : '') + '</div>'; }
+  function backup() {
+    var p = J.privateKey(); if (!p) return;
+    var blob = new Blob([JSON.stringify({ v: 1, site: J.REPO, note: 'Ключ журнала правок. Храните в надёжном месте, никому не пересылайте.', priv: p }, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'klyuch-zhurnala-doctor-marketplace.json';
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function setup() {
+    if (!J.token()) {
+      stateBox.innerHTML = card('Войдите в админку, чтобы откатывать сайт', 'История правок видна и так, а вернуть версию может только тот, кто вошёл в админку.', '<a class="btn" href="./">Открыть админку</a>');
+      return;
+    }
+    J.ownerKey().then(function (pub) {
+      if (!pub) {
+        stateBox.innerHTML = card('Журнал IP ещё не включён', 'Нажмите один раз на своём устройстве. Появится ключ: только с ним видно, кто, когда и с какого IP менял сайт.', '<button class="btn" id="en" type="button">Включить журнал</button>');
+        $('#en').addEventListener('click', function () {
+          var b = this; b.disabled = true; b.textContent = 'Включаю…';
+          J.enableJournal().then(function () {
+            priv = J.privateKey(); backup();
+            say('Журнал включён. Ключ сохранён в этом браузере, запасная копия скачалась файлом — положите её в надёжное место: без неё на другом устройстве журнал не прочитать.', true);
+            setup(); reload();
+          }, function (e) { b.disabled = false; b.textContent = 'Включить журнал'; say('Не получилось включить журнал: ' + e.message + '. Проверьте, что вход в админку выполнен.'); });
+        });
+      } else if (!priv) {
+        stateBox.innerHTML = card('Кто и с какого IP — видит только владелец', 'Если вы владелец и включали журнал на другом устройстве, загрузите сохранённый файл ключа.', '<label class="btn ghost">Загрузить ключ журнала<input type="file" id="kf" accept=".json,application/json" hidden></label>');
+        $('#kf').addEventListener('change', function () {
+          var f = this.files && this.files[0]; if (!f) return;
+          f.text().then(function (t) { J.importPrivate(t); priv = J.privateKey(); say('Ключ загружен.', true); setup(); reload(); })
+            .catch(function (e) { say(e.message || 'Не получилось прочитать файл ключа.'); });
+        });
+      } else {
+        stateBox.innerHTML = card('Журнал включён', 'Вы видите, кто, когда и с какого IP менял сайт. Ключ хранится только в этом браузере.', '<button class="btn ghost" id="bk" type="button">Скачать запасной ключ</button>');
+        $('#bk').addEventListener('click', backup);
+      }
+    }, function () { stateBox.innerHTML = card('Нет связи с GitHub', 'Проверьте интернет и обновите страницу.', ''); });
+  }
+  function meta(box, c) {
+    var msg = c.commit.message || '';
+    if (/journal:v1:/.test(msg)) {
+      if (!priv) { box.textContent = 'Кто и с какого IP — видит только владелец'; return; }
+      J.decryptLine(priv, msg).then(function (e) {
+        if (!e) { box.textContent = 'Запись не расшифровалась: журнал включали другим ключом'; return; }
+        var place = [e.city, e.country].filter(Boolean).join(', ');
+        box.innerHTML = '<span class="who">' + esc(e.who || 'не указано') + '</span> · IP ' + esc(e.ip || '—') + (place ? ' · ' + esc(place) : '') +
+          (e.org ? ' · ' + esc(e.org) : '') + ' · ' + esc(e.ua || '') + (e.files && e.files.length ? '<small>Файлы: ' + esc(e.files.join(', ')) + '</small>' : '');
+      });
+    } else {
+      box.textContent = /^Админка: (добавлено|изменено|удалено|загружен|удалён)/.test(msg) ? 'Правка сделана до включения журнала' : (c.author && c.author.login ? 'Аккаунт GitHub: ' + c.author.login : '');
+    }
+  }
+  function row(c, isNow) {
+    var h = (c.commit.message || '').split('\n')[0], when = fmt(c.commit.committer.date);
+    var el = document.createElement('article'); el.className = 'item';
+    el.innerHTML = '<div class="top"><time datetime="' + esc(c.commit.committer.date) + '">' + esc(when) + '</time>' + (isNow ? '<span class="now">Сейчас на сайте</span>' : '') +
+      '</div><b class="act">' + esc(human(h)) + '</b><div class="meta"></div><div class="actions"></div>';
+    meta(el.querySelector('.meta'), c);
+    var act = el.querySelector('.actions');
+    if (!isNow && oldFormat) {
+      act.innerHTML = '<span class="meta">Версия до перестройки админки — откат к ней недоступен</span>';
+    } else if (!isNow && J.token()) {
+      var b = document.createElement('button'); b.className = 'btn ghost'; b.type = 'button'; b.textContent = 'Вернуть сайт к этой версии';
+      b.addEventListener('click', function () {
+        act.innerHTML = '<div class="ask"><span>Вернуть тексты, цены, кейсы, новости и документы к версии от <b>' + esc(when) + '</b>? Правки после неё отменятся — их можно будет вернуть так же, из журнала.</span>' +
+          '<div class="row"><button class="btn warn" type="button" data-yes>Да, вернуть</button><button class="btn ghost" type="button" data-no>Отмена</button></div></div>';
+        act.querySelector('[data-no]').addEventListener('click', function () { act.innerHTML = ''; act.appendChild(b); });
+        act.querySelector('[data-yes]').addEventListener('click', function () {
+          var y = this; y.disabled = true; y.textContent = 'Возвращаю…';
+          J.rollbackTo(c.sha, when).then(function () {
+            say('Готово: сайт возвращён к версии от ' + when + '. На сайте изменения появятся примерно через минуту.', true);
+            window.scrollTo({ top: 0, behavior: 'smooth' }); reload();
+          }, function (e) {
+            var m = e.status === 409 || e.status === 422 ? 'Пока вы смотрели журнал, кто-то сохранил новую правку. Обновите страницу и попробуйте снова.' : (e.message || 'Не получилось вернуть версию.');
+            say(m); act.innerHTML = ''; act.appendChild(b);
+          });
+        });
+      });
+      act.appendChild(b);
+    }
+    return el;
+  }
+  function load() {
+    more.hidden = true;
+    J.history(page).then(function (cs) {
+      if (page === 1) list.innerHTML = '';
+      list.removeAttribute('aria-busy');
+      if (!cs.length && page === 1) { list.innerHTML = '<div class="card"><b>Правок пока нет</b><p>Здесь появится каждое изменение сайта.</p></div>'; return; }
+      cs.forEach(function (c) { list.appendChild(row(c, first)); first = false; if (/^Админка проще:/.test(c.commit.message || '')) oldFormat = true; });
+      more.hidden = cs.length < 30;
+    }, function (e) {
+      list.removeAttribute('aria-busy');
+      list.innerHTML = '<div class="card"><b>Не получилось загрузить журнал</b><p>' + esc(e.status === 403 ? 'GitHub временно ограничил запросы. Войдите в админку или попробуйте через несколько минут.' : 'Проверьте интернет и обновите страницу.') + '</p></div>';
+    });
+  }
+  function reload() { page = 1; first = true; oldFormat = false; list.setAttribute('aria-busy', 'true'); load(); }
+  more.addEventListener('click', function () { page++; load(); });
+  setup(); load();
+})();
+</script>
+</body>
+</html>
