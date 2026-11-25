@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "pub": {
+    "crv": "P-256",
+    "ext": true,
+    "key_ops": [],
+    "kty": "EC",
+    "x": "4obLdpq6iB4JwHOf0QUwzJTe8ZuAUtFaP4X163nv0Aw",
+    "y": "YcgS-juVfbi3-dNZQKsyNkTUO4ErDimGcn2PjvUGjmE"
+  }
+}
