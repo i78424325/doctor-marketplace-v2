@@ -1,0 +1,382 @@
+# Админка сайта «Доктор Маркетплейс» (Sveltia CMS). Всё, что меняется здесь, сохраняется в репозиторий,
+# после чего сайт сам пересобирается и обновляется примерно за минуту (GitHub Actions → build.py).
+# При переезде на свой домен поменять repo, site_url и display_url.
+backend:
+  name: github
+  repo: i78424325/doctor-marketplace-v2
+  branch: main
+  commit_messages:
+    create: 'Админка: добавлено «{{slug}}» ({{collection}})'
+    update: 'Админка: изменено «{{slug}}» ({{collection}})'
+    delete: 'Админка: удалено «{{slug}}» ({{collection}})'
+    uploadMedia: 'Админка: загружен файл {{path}}'
+    deleteMedia: 'Админка: удалён файл {{path}}'
+site_url: https://i78424325.github.io/doctor-marketplace-v2/
+display_url: https://i78424325.github.io/doctor-marketplace-v2/
+media_folder: src/img/uploads
+public_folder: /img/uploads
+
+collections:
+  # ---------- контакты, мессенджеры, видео-визитка ----------
+  - name: settings
+    label: Настройки и контакты
+    icon: settings
+    files:
+      - name: settings
+        label: Контакты, мессенджеры, видео, логотип
+        file: content/settings.json
+        fields:
+          - { name: company_name, label: 'Название компании', widget: string }
+          - { name: logo, label: 'Логотип (квадратный значок)', widget: image, required: false, hint: 'Пусто — фирменный значок с пульсом. Лучше PNG или SVG 128×128' }
+          - { name: phone, label: 'Телефон — как показывать', widget: string, hint: 'Например: 8 931 009-10-14' }
+          - { name: phone_href, label: 'Телефон для звонка', widget: string, hint: 'Только цифры с плюсом: +79310091014', pattern: ['^\+?\d{10,15}$', 'Только цифры, можно с плюсом в начале'] }
+          - { name: email, label: 'Почта', widget: string }
+          - { name: telegram_url, label: 'Telegram — бот для заявок', widget: string, required: false, hint: 'Ссылка вида https://t.me/имя_бота. По ней ведут кнопки и QR-код. Пусто — ведут на страницу контактов' }
+          - { name: max_url, label: 'MAX — бот для заявок', widget: string, required: false, hint: 'Ссылка вида https://max.ru/имя_бота. Пусто — ведут на страницу контактов' }
+          - { name: manager_telegram_url, label: 'Telegram менеджера (необязательно)', widget: string, required: false }
+          - { name: manager_max_url, label: 'MAX менеджера (необязательно)', widget: string, required: false }
+          - { name: chat_label, label: 'Надпись на кнопке чата', widget: string, default: 'Напишите нам, мы онлайн' }
+          - { name: chat_greeting, label: 'Первое сообщение в чате', widget: string }
+          - { name: video_url, label: 'Видео-визитка на главной', widget: file, required: false, hint: 'Ссылка на VK Видео, Rutube или YouTube — или файл mp4 до 50 МБ. Пусто — карточка «Скоро здесь»' }
+          - { name: video_poster, label: 'Обложка видео', widget: image, required: false, hint: 'Кадр из видео, горизонтальный или квадратный' }
+          - { name: video_caption, label: 'Подпись к видео', widget: string }
+          - { name: footer_text, label: 'Текст в подвале', widget: text }
+          - { name: lead_endpoint, label: 'Адрес приёма заявок (заполняет разработчик)', widget: string, required: false, hint: 'Сервер, который передаёт заявки в amoCRM и менеджеру. Пусто — формы работают в демо-режиме' }
+
+  # ---------- главная ----------
+  - name: home
+    label: Главная страница
+    icon: home
+    files:
+      - name: home
+        label: Главная — тексты и порядок блоков
+        file: content/home.json
+        fields:
+          - { name: hero_chip, label: 'Надпись над заголовком', widget: string }
+          - { name: hero_title, label: 'Заголовок первого экрана', widget: string, hint: '[WB] — Wildberries в фирменном цвете, [OZON] — Ozon, [слова в скобках] — зелёный акцент с растущей линией' }
+          - { name: hero_lead, label: 'Подзаголовок', widget: text }
+          - { name: hero_cta, label: 'Текст главной кнопки', widget: string }
+          - name: sections
+            label: Блоки главной страницы
+            label_singular: блок
+            hint: 'Порядок меняется перетаскиванием. Удалите блок, чтобы скрыть его'
+            widget: list
+            summary: '{{fields.type}}'
+            fields:
+              - name: type
+                label: Блок
+                widget: select
+                options:
+                  - { label: 'Наши клиенты — бегущая строка логотипов', value: clients }
+                  - { label: 'Это про вас? — три карточки', value: who }
+                  - { label: 'Услуги — плитки', value: services }
+                  - { label: 'Цифры', value: stats }
+                  - { label: 'Большая фраза', value: tagline }
+                  - { label: 'Основатель', value: founder }
+                  - { label: 'Новости — три последние', value: news }
+                  - { label: 'Как мы работаем — шаги', value: steps }
+                  - { label: 'Частые вопросы', value: faq }
+                  - { label: 'Призыв записаться', value: cta }
+          - { name: who_chip, label: '«Это про вас?» — надпись', widget: string }
+          - { name: who_title, label: '«Это про вас?» — заголовок', widget: string }
+          - name: who
+            label: «Это про вас?» — карточки
+            label_singular: карточку
+            widget: list
+            summary: '{{fields.label}}'
+            fields:
+              - { name: label, label: 'Метка', widget: string, hint: 'Например: 01 · Старт' }
+              - { name: title, label: 'Заголовок', widget: string, hint: '*Слова в звёздочках* выделяются зелёным' }
+              - { name: items, label: 'Пункты', widget: list, field: { name: item, label: 'Пункт', widget: string } }
+              - { name: link_text, label: 'Текст ссылки', widget: string, required: false }
+              - { name: link, label: 'Куда ведёт ссылка', widget: string, required: false, hint: 'Например: uslugi/podbor-nishi/' }
+          - { name: services_chip, label: 'Услуги — надпись', widget: string }
+          - { name: services_title, label: 'Услуги — заголовок', widget: string }
+          - { name: tagline, label: 'Большая фраза', widget: text, hint: '*Слова в звёздочках* выделяются зелёным' }
+          - name: founder
+            label: Основатель
+            widget: object
+            fields:
+              - { name: chip, label: 'Надпись', widget: string }
+              - { name: name, label: 'Имя', widget: string }
+              - { name: role, label: 'Должность', widget: string }
+              - { name: photo, label: 'Фото', widget: image, required: false, hint: 'Квадратное, лучше от 800×800. Пусто — нынешнее фото' }
+              - { name: items, label: 'Достижения', widget: list, field: { name: item, label: 'Пункт', widget: string } }
+          - { name: news_chip, label: 'Новости — надпись', widget: string }
+          - { name: news_title, label: 'Новости — заголовок', widget: string }
+
+  # ---------- услуги ----------
+  - name: services
+    label: Услуги, цены и кейсы
+    icon: work
+    files:
+      - name: services
+        label: Все услуги
+        file: content/services.json
+        fields:
+          - name: services
+            label: Услуги
+            label_singular: услугу
+            hint: 'Первая услуга — большая плитка на главной. Порядок меняется перетаскиванием'
+            widget: list
+            summary: '{{fields.title}} · от {{fields.price_from}} ₽'
+            fields:
+              - { name: title, label: 'Название', widget: string }
+              - { name: slug, label: 'Адрес страницы латиницей', widget: string, pattern: ['^[a-z0-9-]+$', 'Только латиница, цифры и дефис'], hint: 'reklama → сайт/uslugi/reklama/. У «Сайта для селлера» — sait' }
+              - name: icon
+                label: Значок
+                widget: select
+                default: check-circle
+                options:
+                  - { label: 'График роста', value: chart-line-up }
+                  - { label: 'Рупор', value: megaphone }
+                  - { label: 'Палитра', value: palette }
+                  - { label: 'Камера', value: camera }
+                  - { label: 'Чат', value: chats-circle }
+                  - { label: 'Цель', value: target }
+                  - { label: 'Поиск', value: magnifying-glass }
+                  - { label: 'Сайт', value: browser }
+                  - { label: 'Ракета', value: rocket-launch }
+                  - { label: 'Магазин', value: storefront }
+                  - { label: 'Коробка', value: package }
+                  - { label: 'Доставка', value: truck }
+                  - { label: 'Звезда', value: star }
+                  - { label: 'Печать качества', value: seal-check }
+                  - { label: 'Щит', value: shield-check }
+                  - { label: 'Молния', value: lightning }
+                  - { label: 'Команда', value: users-three }
+                  - { label: 'Столбцы', value: chart-bar }
+                  - { label: 'Оплата', value: credit-card }
+                  - { label: 'Галочка', value: check-circle }
+              - { name: short, label: 'Короткое описание', widget: string }
+              - { name: tile_text, label: 'Подпись в плитке', widget: string, required: false, hint: 'Пусто — короткое описание' }
+              - { name: price_from, label: 'Цена «от», ₽', widget: string, required: false, hint: 'Только число, например 15000. Пусто — на сайте «Цена от … ₽»' }
+              - { name: items, label: 'Что входит', widget: list, field: { name: item, label: 'Пункт', widget: string } }
+              - name: cases
+                label: Кейсы
+                label_singular: кейс
+                widget: list
+                required: false
+                summary: '{{fields.title}}'
+                fields:
+                  - { name: title, label: 'Заголовок кейса', widget: string, hint: 'Например: Магазин посуды на Wildberries' }
+                  - { name: result, label: 'Главный результат одной строкой', widget: string, required: false }
+                  - name: results
+                    label: Цифры результата
+                    label_singular: цифру
+                    widget: list
+                    required: false
+                    summary: '{{fields.value}} {{fields.label}}'
+                    fields:
+                      - { name: value, label: 'Цифра', widget: string, hint: 'Например: ×3 или +240%' }
+                      - { name: label, label: 'Подпись', widget: string, hint: 'Например: выручка за 2 месяца' }
+                  - { name: image, label: 'Фото', widget: image, required: false }
+                  - { name: video, label: 'Видео', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
+                  - { name: text, label: 'Описание', widget: markdown, required: false }
+
+  # ---------- новости ----------
+  - name: news
+    label: Новости и статьи
+    label_singular: новость
+    icon: newspaper
+    folder: content/news
+    format: json
+    extension: json
+    create: true
+    delete: true
+    slug: '{{year}}-{{month}}-{{day}}-{{slug}}'
+    summary: '{{date}} · {{title}}'
+    sortable_fields: [date, title]
+    fields:
+      - { name: title, label: 'Заголовок', widget: string }
+      - { name: date, label: 'Дата', widget: datetime, format: 'YYYY-MM-DD', date_format: 'DD.MM.YYYY', time_format: false }
+      - { name: excerpt, label: 'Коротко для карточки', widget: text }
+      - { name: cover, label: 'Обложка', widget: image, required: false }
+      - { name: video, label: 'Видео', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
+      - { name: body, label: 'Текст', widget: markdown }
+      - { name: url, label: 'Адрес латиницей', widget: string, required: false, hint: 'Необязательно. Пусто — адрес сделается из заголовка' }
+      - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
+
+  # ---------- документы ----------
+  - name: docs
+    label: Документы
+    label_singular: документ
+    icon: description
+    folder: content/docs
+    format: json
+    extension: json
+    create: true
+    delete: true
+    slug: '{{slug}}'
+    summary: '{{order}}. {{title}}'
+    sortable_fields: [order, title]
+    fields:
+      - { name: title, label: 'Название', widget: string }
+      - { name: order, label: 'Порядок в списке', widget: number, value_type: int, default: 10 }
+      - { name: body, label: 'Текст документа', widget: markdown }
+      - { name: url, label: 'Адрес латиницей', widget: string, required: false, hint: 'Необязательно. У согласий не менять: на них ведут галочки в формах' }
+      - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
+
+  # ---------- конструктор страниц ----------
+  - name: pages
+    label: Страницы (конструктор)
+    label_singular: страницу
+    icon: dashboard_customize
+    description: 'Новые страницы из готовых блоков — например, под рекламную кампанию. Для A/B-теста скопируйте страницу (меню ⋮ → «Дублировать») и поменяйте адрес и тексты.'
+    folder: content/pages
+    format: json
+    extension: json
+    create: true
+    delete: true
+    slug: '{{slug}}'
+    summary: '{{title}} → /{{url}}/'
+    fields:
+      - { name: title, label: 'Название страницы', widget: string }
+      - { name: url, label: 'Адрес латиницей', widget: string, pattern: ['^[a-z0-9-]+$', 'Только латиница, цифры и дефис'], hint: 'reklama-wb → сайт/reklama-wb/' }
+      - { name: description, label: 'Описание для поиска и соцсетей', widget: text, required: false }
+      - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
+      - name: blocks
+        label: Блоки страницы
+        label_singular: блок
+        hint: 'Добавляйте блоки и меняйте порядок перетаскиванием'
+        widget: list
+        types:
+          - name: hero
+            label: Первый экран
+            widget: object
+            summary: '{{fields.title}}'
+            fields:
+              - { name: chip, label: 'Надпись над заголовком', widget: string, required: false }
+              - { name: title, label: 'Заголовок', widget: string, hint: '*Слова в звёздочках* выделяются зелёным' }
+              - { name: text, label: 'Подзаголовок', widget: text, required: false }
+              - { name: button, label: 'Текст кнопки', widget: string, required: false }
+              - { name: button_link, label: 'Куда ведёт кнопка', widget: string, required: false, hint: 'Пусто — откроется окно записи на консультацию' }
+              - { name: image, label: 'Картинка справа', widget: image, required: false }
+          - name: text
+            label: Текст
+            widget: object
+            summary: '{{fields.title}}'
+            fields:
+              - { name: title, label: 'Заголовок', widget: string, required: false }
+              - { name: body, label: 'Текст', widget: markdown }
+          - name: image
+            label: Фото
+            widget: object
+            fields:
+              - { name: image, label: 'Фото', widget: image }
+              - { name: caption, label: 'Подпись', widget: string, required: false }
+          - name: video
+            label: Видео
+            widget: object
+            fields:
+              - { name: url, label: 'Видео', widget: file, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
+              - { name: poster, label: 'Обложка', widget: image, required: false }
+          - name: cta
+            label: Призыв записаться
+            widget: object
+            summary: '{{fields.title}}'
+            fields:
+              - { name: title, label: 'Заголовок', widget: string, required: false }
+              - { name: text, label: 'Текст', widget: text, required: false }
+              - { name: button, label: 'Текст кнопки', widget: string, required: false }
+          - { name: services, label: 'Плитки услуг', widget: object, fields: [{ name: note, label: 'Заметка для себя', widget: string, required: false }] }
+          - { name: stats, label: 'Цифры', widget: object, fields: [{ name: note, label: 'Заметка для себя', widget: string, required: false }] }
+          - { name: steps, label: 'Как мы работаем', widget: object, fields: [{ name: note, label: 'Заметка для себя', widget: string, required: false }] }
+          - { name: clients, label: 'Наши клиенты', widget: object, fields: [{ name: note, label: 'Заметка для себя', widget: string, required: false }] }
+          - { name: faq, label: 'Частые вопросы', widget: object, fields: [{ name: note, label: 'Заметка для себя', widget: string, required: false }] }
+          - { name: news, label: 'Последние новости', widget: object, fields: [{ name: note, label: 'Заметка для себя', widget: string, required: false }] }
+
+  # ---------- общие блоки и тексты страниц ----------
+  - name: blocks
+    label: Блоки и тексты страниц
+    icon: view_agenda
+    files:
+      - name: clients
+        label: Наши клиенты — логотипы
+        file: content/clients.json
+        fields:
+          - { name: title, label: 'Заголовок', widget: string }
+          - name: logos
+            label: Логотипы
+            label_singular: логотип
+            hint: 'Строка бежит слева направо. Порядок — перетаскиванием'
+            widget: list
+            required: false
+            summary: '{{fields.name}}'
+            fields:
+              - { name: name, label: 'Название клиента', widget: string }
+              - { name: image, label: 'Логотип', widget: image, hint: 'PNG или SVG с прозрачным фоном' }
+              - { name: url, label: 'Ссылка (необязательно)', widget: string, required: false }
+      - name: faq
+        label: Частые вопросы
+        file: content/faq.json
+        fields:
+          - name: items
+            label: Вопросы
+            label_singular: вопрос
+            widget: list
+            summary: '{{fields.q}}'
+            fields:
+              - { name: q, label: 'Вопрос', widget: string }
+              - { name: a, label: 'Ответ', widget: text }
+      - name: stats
+        label: Цифры
+        file: content/stats.json
+        fields:
+          - name: items
+            label: Цифры
+            label_singular: цифру
+            widget: list
+            summary: '{{fields.value}} — {{fields.label}}'
+            fields:
+              - { name: value, label: 'Цифра', widget: string, hint: 'Например: 6 000+ или 93%' }
+              - { name: label, label: 'Подпись', widget: string }
+      - name: steps
+        label: Как мы работаем — шаги
+        file: content/steps.json
+        fields:
+          - name: items
+            label: Шаги работы
+            label_singular: шаг
+            widget: list
+            summary: '{{fields.title}}'
+            fields:
+              - { name: title, label: 'Шаг', widget: string }
+              - { name: text, label: 'Описание', widget: string }
+          - name: site
+            label: Шаги на странице «Сайт для селлера»
+            label_singular: шаг
+            widget: list
+            summary: '{{fields.title}}'
+            fields:
+              - { name: title, label: 'Шаг', widget: string }
+              - { name: text, label: 'Описание', widget: string }
+      - name: texts
+        label: Заголовки страниц
+        file: content/texts.json
+        fields:
+          - { name: uslugi, label: 'Услуги', widget: object, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: lead, label: 'Подзаголовок', widget: text }] }
+          - name: o_nas
+            label: О компании
+            widget: object
+            fields:
+              - { name: title, label: 'Заголовок', widget: string }
+              - { name: lead, label: 'Подзаголовок', widget: text }
+              - name: why
+                label: Почему мы — карточки
+                label_singular: карточку
+                widget: list
+                summary: '{{fields.text}}'
+                fields:
+                  - { name: icon, label: 'Значок', widget: select, options: [chart-bar, clock, users-three, shield-check, seal-check, target, lightning, star, chart-line-up, rocket-launch] }
+                  - { name: text, label: 'Текст', widget: string }
+          - { name: voprosy, label: 'Вопросы', widget: object, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: lead, label: 'Подзаголовок', widget: text }] }
+          - name: kontakty
+            label: Контакты
+            widget: object
+            fields:
+              - { name: title, label: 'Заголовок', widget: string }
+              - { name: lead, label: 'Подзаголовок', widget: text }
+              - { name: meeting, label: 'Что будет на встрече', widget: list, field: { name: item, label: 'Пункт', widget: string } }
+          - { name: novosti, label: 'Новости', widget: object, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: lead, label: 'Подзаголовок', widget: text }] }
+          - { name: cta, label: 'Призыв записаться (низ страниц)', widget: object, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: text, label: 'Текст', widget: text }, { name: button, label: 'Текст кнопки', widget: string }] }

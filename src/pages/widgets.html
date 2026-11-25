@@ -1,0 +1,93 @@
+<div class="dock" id="dock" data-tg="{{tg-raw}}" data-max="{{max-raw}}" data-endpoint="{{endpoint}}">
+  <span class="dock-tip" id="dock-tip" aria-hidden="true">{{chat_label}}</span>
+  <a class="dock-btn dock-tg" href="{{base}}kontakty/" data-lead data-channel="tg" aria-label="Написать в Telegram">{{icon:telegram-logo}}</a>
+  <a class="dock-btn dock-max" href="{{base}}kontakty/" data-lead data-channel="max" aria-label="Написать в MAX"><b>MAX</b></a>
+  <button class="dock-chat" type="button" id="chat-open" aria-controls="chat" aria-expanded="false"><span class="dock-ic">{{icon:chat-circle-dots}}<i class="dot"></i></span><span class="dock-t">{{chat_label}}</span></button>
+</div>
+
+<section class="chat" id="chat" aria-labelledby="chat-h" hidden>
+  <header class="chat-head">
+    <span class="chat-av">{{logo}}<i class="dot"></i></span>
+    <div><b id="chat-h">{{company}}</b><span>Менеджер онлайн</span></div>
+    <button class="chat-x" type="button" data-chat-close aria-label="Закрыть чат">{{icon:x}}</button>
+  </header>
+  <div class="chat-log" id="chat-log" aria-live="polite">
+    <div class="msg msg-in">{{chat_greeting}}</div>
+  </div>
+  <div class="chat-quick" id="chat-quick">
+    <button type="button" data-q="Хочу бесплатную консультацию">Хочу консультацию</button>
+    <button type="button" data-q="Сколько стоит продвижение на Wildberries?">Сколько стоит?</button>
+    <button type="button" data-q="Хочу выйти на Ozon с нуля">Выйти на Ozon с нуля</button>
+  </div>
+  <form class="chat-form" id="chat-form" novalidate>
+    <input class="inp" id="chat-in" type="text" placeholder="Ваше сообщение" autocomplete="off" maxlength="600" aria-label="Ваше сообщение">
+    <button class="chat-send" type="submit" aria-label="Отправить">{{icon:paper-plane-right}}</button>
+  </form>
+  <form class="chat-contact" id="chat-contact" novalidate hidden>
+    <input class="inp" id="chat-cn" type="text" placeholder="Телефон или @ник в Телеграме" autocomplete="tel" aria-label="Телефон или ник в Телеграме">
+    <div class="consents consents-sm">{{consents-chat}}</div>
+    <p class="err" id="chat-cn-err" aria-live="polite"></p>
+    <button class="btn btn-primary" type="submit"><span>Отправить менеджеру</span></button>
+  </form>
+  <p class="chat-alt">Или в мессенджере: <a href="{{base}}kontakty/" data-lead data-channel="tg">Telegram</a> · <a href="{{base}}kontakty/" data-lead data-channel="max">MAX</a></p>
+</section>
+
+<div class="modal" id="lead" role="dialog" aria-modal="true" aria-labelledby="lead-h" hidden>
+  <div class="modal-bg" data-close></div>
+  <div class="sheet" tabindex="-1">
+    <button class="sheet-x" type="button" data-close aria-label="Закрыть">{{icon:x}}</button>
+    <span class="chip chip-accent"><i class="dot"></i>Бесплатно и без обязательств</span>
+    <h2 class="heading-5" id="lead-h">Запишитесь на бесплатную консультацию</h2>
+    <p class="sheet-lead">Выберите, как удобнее: в мессенджере за пару касаний или через короткую форму.</p>
+    <div class="seg" role="tablist" aria-label="Способ связи">
+      <button type="button" role="tab" id="t-tg" aria-controls="p-tg" aria-selected="true" data-tab="tg">{{icon:telegram-logo}}Telegram</button>
+      <button type="button" role="tab" id="t-max" aria-controls="p-max" aria-selected="false" data-tab="max" tabindex="-1"><b class="max-mini">MAX</b>MAX</button>
+      <button type="button" role="tab" id="t-form" aria-controls="p-form" aria-selected="false" data-tab="form" tabindex="-1">{{icon:phone}}Телефон</button>
+    </div>
+    <div class="pane" id="p-tg" role="tabpanel" aria-labelledby="t-tg" data-pane="tg">
+      <div class="qr-box">
+        <div class="qr" data-qr="tg" role="img" aria-label="QR-код: запись через Telegram"><span class="qr-lock">{{icon:qr-code}}Отметьте согласие ниже</span></div>
+        <div class="qr-copy">
+          <b class="qr-t"><span class="d-only">Наведите камеру телефона на код</span><span class="m-only">Запись в пару касаний</span></b>
+          <span>Откроется наш бот: он спросит имя и номер телефона, а менеджер сразу напишет вам.</span>
+          <a class="btn btn-tg" data-go="tg" href="{{base}}kontakty/" target="_blank" rel="noopener" aria-disabled="true">{{icon:telegram-logo}}<span>Открыть Telegram</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="pane" id="p-max" role="tabpanel" aria-labelledby="t-max" data-pane="max" hidden>
+      <div class="qr-box">
+        <div class="qr" data-qr="max" role="img" aria-label="QR-код: запись через MAX"><span class="qr-lock">{{icon:qr-code}}Отметьте согласие ниже</span></div>
+        <div class="qr-copy">
+          <b class="qr-t"><span class="d-only">Наведите камеру телефона на код</span><span class="m-only">Запись в пару касаний</span></b>
+          <span>Откроется наш бот в MAX: он спросит имя и номер телефона, а менеджер сразу напишет вам.</span>
+          <a class="btn btn-max" data-go="max" href="{{base}}kontakty/" target="_blank" rel="noopener" aria-disabled="true"><b class="max-mini">MAX</b><span>Открыть MAX</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="pane" id="p-form" role="tabpanel" aria-labelledby="t-form" data-pane="form" hidden>
+      <form class="form form-sm" id="lead-form" data-lead-form novalidate>
+        <div class="field"><label for="l-name">Как к вам обращаться <b>*</b></label><input class="inp" id="l-name" name="name" type="text" autocomplete="name" placeholder="Имя" required><p class="err" id="l-name-err" aria-live="polite"></p></div>
+        <div class="field"><label for="l-contact">Телефон или ник в Телеграме <b>*</b></label><input class="inp" id="l-contact" name="contact" type="text" autocomplete="tel" placeholder="+7 900 000-00-00 или @username" required><p class="err" id="l-contact-err" aria-live="polite"></p></div>
+        <div class="field"><label for="l-store">Название магазина или ссылка</label><input class="inp" id="l-store" name="store" type="text" autocomplete="organization" placeholder="Например, «Уютный дом» на Wildberries"></div>
+        <input type="hidden" name="service" id="l-service">
+        <p class="err form-err" aria-live="polite"></p>
+        <button class="btn btn-primary btn-lg" type="submit"><span>Отправить заявку</span></button>
+      </form>
+      <div class="done" hidden tabindex="-1">
+        <span class="ok">{{icon:check}}</span>
+        <h3 class="heading-6">Заявка принята</h3>
+        <p data-done-text>В рабочей версии заявка сразу придёт менеджеру и в amoCRM. Сейчас это демо: заявка никуда не отправлена.</p>
+      </div>
+    </div>
+    <div class="consents" id="lead-consents">{{consents-lead}}</div>
+    <p class="demo-note" data-demo>Демо-версия: бот подключим, когда будут ссылки на Telegram и MAX. Сейчас QR ведёт на страницу контактов.</p>
+  </div>
+</div>
+
+<div class="modal modal-video" id="vmodal" role="dialog" aria-modal="true" aria-label="Видео-визитка" hidden>
+  <div class="modal-bg" data-close></div>
+  <div class="vsheet" tabindex="-1">
+    <button class="sheet-x" type="button" data-close aria-label="Закрыть видео">{{icon:x}}</button>
+    <div class="vframe" id="vframe"></div>
+  </div>
+</div>

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{title}}</title>
+<meta name="description" content="{{desc}}">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#F4F3EF">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="{{title}}">
+<meta property="og:description" content="{{desc}}">
+<meta property="og:image" content="{{site}}img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="{{base}}favicon.svg" type="image/svg+xml">
+<link rel="preload" href="{{base}}fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{base}}fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<script>document.documentElement.className='js'</script>
+<style>{{css}}</style>
+{{head}}
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"{{base}}*"},{"not":{"href_matches":"{{base}}brief/*"}},{"not":{"href_matches":"{{base}}admin/*"}}]},"eagerness":"moderate"}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Перейти к содержанию</a>
+<div id="top-sensor" aria-hidden="true" style="position:absolute;top:0;left:0;width:1px;height:8px"></div>
+<header>
+  <nav class="nav" aria-label="Основное меню">
+    <a class="logo" href="{{base}}" aria-label="{{company}} — на главную">{{logo}}<span>{{company}}</span></a>
+    <div class="nav-links">{{nav}}</div>
+    <a class="btn btn-primary btn-sm nav-cta" href="{{base}}kontakty/" data-lead><span>Консультация</span></a>
+    <button class="menu-btn" type="button" aria-label="Открыть меню" aria-expanded="false" aria-controls="mmenu"><span></span><span></span></button>
+  </nav>
+  <div class="mobile-menu" id="mmenu">
+    {{mnav}}
+    <a class="btn btn-primary btn-lg" href="{{base}}kontakty/" data-lead><span>Получить бесплатную консультацию</span></a>
+  </div>
+</header>
+<main id="main">
+{{content}}
+</main>
+<footer class="footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="logo" href="{{base}}">{{logo}}<span>{{company}}</span></a>
+        <p class="foot-about">{{footer_text}}</p>
+        <div class="msg-row">
+          <a class="msg-btn msg-tg" href="{{tg}}" data-lead data-channel="tg">{{icon:telegram-logo}}Telegram</a>
+          <a class="msg-btn msg-max" href="{{max}}" data-lead data-channel="max"><b class="max-mini">MAX</b>MAX</a>
+        </div>
+      </div>
+      <div><h3>Разделы</h3><ul>{{fnav}}</ul></div>
+      <div><h3>Контакты</h3><ul><li><a href="tel:{{phone_href}}">{{phone}}</a></li><li><a href="mailto:{{email}}">{{email}}</a></li><li><a href="{{base}}kontakty/" data-lead>Записаться на консультацию</a></li></ul></div>
+      <div><h3>Документы</h3><ul>{{fdocs}}</ul></div>
+    </div>
+    <div class="foot-note"><span>© {{year}} {{company}}</span><span>Wildberries и Ozon — товарные знаки их правообладателей</span></div>
+  </div>
+</footer>
+{{sticky}}
+{{widgets}}
+{{scripts}}
+</body>
+</html>

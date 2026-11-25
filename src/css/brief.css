@@ -1,0 +1,78 @@
+/* Бриф: пошаговая форма */
+.bshell{max-width:760px;margin:0 auto;padding:112px max(var(--gut),env(safe-area-inset-left,0px)) 160px}
+.bintro .heading-2{margin-top:16px}
+.bintro p{margin-top:16px;color:var(--muted);font-size:18px;line-height:28px;font-weight:500}
+.base-box{margin-top:32px;padding:24px;border-radius:var(--r5);background:var(--s1);box-shadow:inset 0 0 0 1px var(--a24)}
+.base-box h2{font-size:16px;line-height:24px;font-weight:600;color:var(--accent)}
+.base-box ul{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px}
+@media (min-width:640px){.base-box ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 24px}}
+.base-box li{display:flex;gap:8px;align-items:flex-start;font-size:14px;line-height:20px;color:var(--muted)}
+.base-box li .i{color:var(--accent);font-size:16px;margin-top:2px}
+.bprog{position:sticky;top:calc(76px + env(safe-area-inset-top,0px));z-index:20;margin-top:40px;padding:12px 0;background:rgba(244,243,239,.97)}
+.bprog-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;line-height:20px}
+.bprog-row b{font-weight:600}
+.bprog-row span{color:var(--muted)}
+.bar{margin-top:8px;height:4px;border-radius:4px;background:var(--s3);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);box-shadow:0 0 12px var(--accent);transform-origin:left;transform:scaleX(var(--p,0));transition:transform .5s var(--ease)}
+.pills{margin-top:12px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--rf);font-size:12px;line-height:16px;font-weight:600;color:var(--dim);box-shadow:inset 0 0 0 1px var(--line);transition:color .3s var(--ease),background-color .3s var(--ease)}
+.pill.done{color:var(--accent)}
+.pill[aria-current="step"]{color:var(--ink);background:var(--accent);box-shadow:none}
+.pill:disabled{cursor:default}
+.bstep{margin-top:24px;display:grid;gap:16px}
+.bstep.show{animation:fadeUp .6s var(--ease)}
+.bstep h2{font-size:24px;line-height:32px;font-weight:600;letter-spacing:-.02em}
+.q{padding:24px;border-radius:var(--r5);background:var(--s1);box-shadow:inset 0 0 0 1px var(--line);transition:box-shadow .3s var(--ease)}
+.q.invalid{box-shadow:inset 0 0 0 1px var(--danger)}
+.q-title{font-size:18px;line-height:28px;font-weight:600}
+.q-num{color:var(--accent);margin-right:4px}
+.q-req{margin-left:8px;vertical-align:2px;font-size:12px;line-height:16px;font-weight:600;color:var(--accent)}
+.q-hint{margin-top:4px;font-size:14px;line-height:20px;color:var(--muted)}
+.q-err{margin-top:12px;font-size:12px;line-height:16px;color:var(--danger)}
+.q-err:empty{display:none}
+.opts{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+.opt{display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border-radius:var(--rf);background:var(--s2);box-shadow:inset 0 0 0 1px var(--line2);font-size:14px;line-height:20px;font-weight:500;text-align:left;transition:background-color .3s var(--ease),box-shadow .3s var(--ease),transform .5s var(--ease)}
+.opt:hover{background:var(--s3)}
+.opt:active{transform:scale(.98)}
+.opt .tick{width:18px;height:18px;flex-shrink:0;border-radius:6px;display:grid;place-items:center;box-shadow:inset 0 0 0 1.5px var(--dim);color:var(--ink);transition:background-color .3s var(--ease),box-shadow .3s var(--ease)}
+.opt.one .tick{border-radius:50%}
+.opt .tick .i{font-size:12px;transform:scale(0);transition:transform .3s var(--ease)}
+.opt[aria-pressed="true"]{background:var(--a12);box-shadow:inset 0 0 0 1px var(--accent)}
+.opt[aria-pressed="true"] .tick{background:var(--accent);box-shadow:none}
+.opt[aria-pressed="true"] .tick .i{transform:scale(1)}
+.other{margin-top:12px}
+.other[hidden]{display:none}
+.q .voice-wrap{margin-top:16px}
+.q textarea.inp{min-height:120px}
+.q textarea.inp.short{min-height:72px}
+.bnav{position:fixed;left:0;right:0;bottom:0;z-index:30;padding:12px max(16px,env(safe-area-inset-left,0px)) calc(12px + env(safe-area-inset-bottom,0px));background:rgba(244,243,239,.97);box-shadow:inset 0 1px 0 var(--line)}
+.bnav-in{max-width:760px;margin:0 auto;display:flex;gap:12px}
+.bnav .btn{flex:1}
+.bnav .btn-ghost{flex:0 0 auto}
+.restore{margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font-size:14px;line-height:20px;color:var(--muted)}
+.restore[hidden]{display:none}
+.restore button{color:var(--accent);font-weight:600}
+.sum{display:grid;gap:12px}
+.sum-step{padding:24px;border-radius:var(--r5);background:var(--s1);box-shadow:inset 0 0 0 1px var(--line)}
+.sum-step header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sum-step h3{font-size:16px;line-height:24px;font-weight:600}
+.sum-step header button{font-size:14px;line-height:20px;font-weight:600;color:var(--accent)}
+.sum-step dl{margin:16px 0 0;display:grid;gap:12px}
+.sum-step dt{font-size:12px;line-height:16px;color:var(--dim)}
+.sum-step dd{margin:4px 0 0;font-size:14px;line-height:20px;white-space:pre-wrap}
+.sum-step dd.empty{color:var(--dim)}
+.bdone{padding:32px 24px;border-radius:var(--r5);background:var(--a12);box-shadow:inset 0 0 0 1px var(--a24);display:grid;justify-items:start;gap:16px;animation:fadeUp .6s var(--ease)}
+.bdone[hidden]{display:none}
+.bdone .ok{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--ink);font-size:28px;box-shadow:0 0 40px rgba(78,182,121,.55)}
+.bdone p{color:var(--muted)}
+.bdone .row{display:flex;flex-wrap:wrap;gap:12px}
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:60;transform:translate(-50%,16px);max-width:calc(100% - 32px);width:max-content;padding:12px 16px;border-radius:var(--r3);background:#0F3B2A;color:#FFFFFF;font-size:14px;line-height:20px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .3s var(--ease),transform .5s var(--ease)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+/* десктоп: «Далее» — обычная кнопка справа, а не полоса во всю ширину */
+@media (min-width:768px){.bnav .btn{flex:0 0 auto}.bnav #next{margin-left:auto;min-width:240px}}
+/* на проверке: не отвеченный обязательный вопрос подсвечен */
+.sum dd.need{color:var(--danger)}
+/* проверочный режим ?qa=1: без анимаций (для скриншотов) */
+.qa .bstep.show,.qa .bdone{animation:none!important}
+.qa .bar i,.qa .pill,.qa .opt,.qa .opt .tick,.qa .opt .tick .i{transition:none!important}

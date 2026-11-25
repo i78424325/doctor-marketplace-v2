@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Бриф на создание интернет-магазина — Доктор Маркетплейс</title>
+<meta name="description" content="Бриф на сайт для селлера: 19 вопросов за 5–7 минут, отвечать можно голосом. По ответам подготовимся к созвону и обсудим сроки и стоимость.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#000000">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:title" content="Бриф на создание интернет-магазина">
+<meta property="og:description" content="19 вопросов за 5–7 минут, можно голосом. Доктор Маркетплейс × OS Ecom.">
+<meta property="og:image" content="{{site}}img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="{{base}}favicon.svg" type="image/svg+xml">
+<link rel="preload" href="{{base}}fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{base}}fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
+<style>{{css}}</style>
+</head>
+<body>
+<a class="skip" href="#bsteps">Перейти к вопросам</a>
+<header>
+  <nav class="nav" aria-label="Основное меню">
+    <a class="logo" href="{{base}}" aria-label="Доктор Маркетплейс — на главную">{{logo}}<span>Доктор Маркетплейс</span></a>
+    <a class="btn btn-ghost btn-sm nav-back" href="{{base}}" aria-label="На главную"><span class="flip">{{icon:arrow-right}}</span><span class="nav-back-t">На главную</span></a>
+  </nav>
+</header>
+<main class="bshell" id="main">
+  <div class="bintro">
+    <span class="chip chip-accent"><i class="dot"></i>5–7 минут · можно голосом</span>
+    <h1 class="heading-2">Бриф на создание интернет-магазина</h1>
+    <p>Ответьте на вопросы — по ответам подготовимся к созвону, где обсудим сроки и стоимость. Не знаете ответа — просто пропустите вопрос.</p>
+  </div>
+  <section class="base-box" aria-labelledby="base-h">
+    <h2 id="base-h">Что уже будет на сайте</h2>
+    <ul>
+      <li>{{icon:check}}<span>Админ-панель: полностью редактируете все карточки товаров</span></li>
+      <li>{{icon:check}}<span>Статистика и аналитика, Яндекс Метрика с Вебвизором</span></li>
+      <li>{{icon:check}}<span>Индексация всех страниц в Яндексе и Google</span></li>
+      <li>{{icon:check}}<span>Личный кабинет покупателя</span></li>
+      <li>{{icon:check}}<span>Доставка через СДЭК, Яндекс и другие службы</span></li>
+      <li>{{icon:check}}<span>Заказы приходят на почту и в Телеграм</span></li>
+      <li>{{icon:check}}<span>Максимум автоматизации, минимум ручной работы</span></li>
+    </ul>
+  </section>
+  <p class="restore" id="restore" hidden>{{icon:clock}}<span>Мы сохранили ваши ответы с прошлого раза.</span><button type="button" id="restart">Начать заново</button></p>
+  <div class="bprog" id="bprog">
+    <div class="bprog-row"><b id="bprog-title">О бизнесе</b><span id="bprog-step">Шаг 1 из 5</span></div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="pills" id="pills" aria-label="Шаги брифа"></div>
+  </div>
+  <div id="bsteps"></div>
+</main>
+<div class="bnav"><div class="bnav-in">
+  <button type="button" class="btn btn-ghost" id="back" hidden><span class="flip">{{icon:arrow-right}}</span><span>Назад</span></button>
+  <button type="button" class="btn btn-primary" id="next"><span>Далее</span>{{icon:arrow-right}}</button>
+</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="{{base}}js/voice.js?v={{ver}}"></script>
+<script src="{{base}}js/brief.js?v={{ver}}"></script>
+</body>
+</html>
