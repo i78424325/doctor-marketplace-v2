@@ -1,18 +1,23 @@
 # Админка сайта «Доктор Маркетплейс» (Sveltia CMS). Всё, что меняется здесь, сохраняется в репозиторий,
 # после чего сайт сам пересобирается и обновляется примерно за минуту (GitHub Actions → build.py).
-# При переезде на свой домен поменять repo, site_url и display_url.
+# При переезде на свой домен поменять repo; адреса сайта (/doctor-marketplace-v2/, https://i78424325.github.io/doctor-marketplace-v2/) подставляет build.py.
+app_title: 'Доктор Маркетплейс — админка'
+logo:
+  src: '/doctor-marketplace-v2/favicon.svg'
+  show_in_header: true
 backend:
   name: github
   repo: i78424325/doctor-marketplace-v2
   branch: main
+  auth_methods: [token]  # вход по ключу доступа; кнопка «Войти через GitHub» требует отдельного сервера входа
   commit_messages:
     create: 'Админка: добавлено «{{slug}}» ({{collection}})'
     update: 'Админка: изменено «{{slug}}» ({{collection}})'
     delete: 'Админка: удалено «{{slug}}» ({{collection}})'
     uploadMedia: 'Админка: загружен файл {{path}}'
     deleteMedia: 'Админка: удалён файл {{path}}'
-site_url: https://i78424325.github.io/doctor-marketplace-v2/
-display_url: https://i78424325.github.io/doctor-marketplace-v2/
+site_url: 'https://i78424325.github.io/doctor-marketplace-v2/'
+display_url: 'https://i78424325.github.io/doctor-marketplace-v2/'
 media_folder: src/img/uploads
 public_folder: /img/uploads
 media_libraries:
