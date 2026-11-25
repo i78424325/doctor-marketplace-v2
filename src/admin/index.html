@@ -9,7 +9,10 @@
 <link href="config.yml" type="application/yaml" rel="cms-config-url">
 </head>
 <body>
-<!-- Sveltia CMS: вход через GitHub (кнопка «Войти с токеном»), правки сохраняются в репозиторий, сайт пересобирается сам -->
+<!-- Журнал правок: к каждому сохранению дописывается зашифрованная запись «кто, когда, IP»; кнопка «Журнал правок и откат» -->
+<script src="journal.js?v={{ver}}"></script>
+<script>window.DMJournal && window.DMJournal.boot();</script>
+<!-- Sveltia CMS: вход по ключу доступа или по ссылке со страницы ssylka.html; правки сохраняются в репозиторий, сайт пересобирается сам -->
 <script src="https://unpkg.com/@sveltia/cms@0.262.1/dist/sveltia-cms.js"
         onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@sveltia/cms@0.262.1/dist/sveltia-cms.js';document.body.appendChild(s)"></script>
 </body>

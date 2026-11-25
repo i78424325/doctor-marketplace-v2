@@ -49,6 +49,8 @@ a{color:var(--acc)}
       <li>Отправьте ссылку лично, например в Telegram.</li>
     </ol>
     <form id="f" autocomplete="off" novalidate>
+      <label for="n">Для кого ссылка</label>
+      <input id="n" type="text" placeholder="Например: Артём" maxlength="40" autocomplete="off">
       <label for="k">Ключ доступа GitHub</label>
       <input id="k" type="password" placeholder="github_pat_…" spellcheck="false" autocomplete="off">
       <button class="btn" type="submit">Сделать ссылку</button>
@@ -61,7 +63,7 @@ a{color:var(--acc)}
         <button class="btn" type="button" id="copy">Скопировать ссылку</button>
         <a class="btn ghost" id="open" href="#" target="_blank" rel="noopener">Проверить вход</a>
       </div>
-      <p class="note">Ссылка — это ключ от админки: не публикуйте её. Если она ушла не туда, удалите ключ на GitHub — ссылка сразу перестанет работать, и можно сделать новую.</p>
+      <p class="note">Правки по этой ссылке подписываются именем «<span id="nm"></span>» в журнале правок. Ссылка — это ключ от админки: не публикуйте её. Если она ушла не туда, удалите ключ на GitHub — ссылка сразу перестанет работать, и можно сделать новую.</p>
     </div>
   </div>
 </main>
@@ -79,8 +81,9 @@ a{color:var(--acc)}
   function b64url(s) { return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
   f.addEventListener('submit', function (e) {
     e.preventDefault();
-    var token = k.value.trim();
+    var token = k.value.trim(), name = document.getElementById('n').value.replace(/\s+/g, ' ').trim();
     out.hidden = true;
+    if (!name) { say('Напишите, для кого ссылка: так в журнале правок будет видно, кто что менял.', 'err'); document.getElementById('n').focus(); return; }
     if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(token)) { say('Это не похоже на ключ GitHub: он начинается с github_pat_.', 'err'); k.focus(); return; }
     say('Проверяю ключ на GitHub…');
     fetch('https://api.github.com/repos/' + repo, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' } })
@@ -88,8 +91,10 @@ a{color:var(--acc)}
         if (r.status === 401) throw new Error('Ключ не подходит или уже удалён на GitHub.');
         if (r.status === 404) throw new Error('У ключа нет доступа к ' + repo + '. Выберите этот репозиторий при создании ключа.');
         if (!r.ok) throw new Error('GitHub ответил ошибкой ' + r.status + '. Попробуйте ещё раз.');
-        var link = admin + '#/signin/' + b64url(JSON.stringify({ token: token }));
-        l.value = link; open.href = link; out.hidden = false; k.value = '';
+        var link = admin + '#/signin/' + b64url(JSON.stringify({ token: token, who: name }));
+        l.value = link; out.hidden = false; k.value = '';
+        open.href = admin + '#/signin/' + b64url(JSON.stringify({ token: token })); // проверка входа — без имени, чтобы ваш браузер не подписывался чужим именем
+        document.getElementById('nm').textContent = name;
         say('Готово: ключ рабочий. Если правка в админке не сохранится — у ключа нет разрешения Contents: Read and write.', 'ok');
       })
       .catch(function (err) { say(err && err.message ? err.message : 'Не получилось проверить ключ. Проверьте интернет.', 'err'); });

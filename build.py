@@ -724,9 +724,9 @@ for f in list((SRC / 'img').glob('*.webp')) + [SRC / 'img' / 'og.png'] + list((S
 for sub in ('img/uploads', 'admin'):
     if (SRC / sub).exists():
         shutil.copytree(SRC / sub, OUT / sub)
-if (OUT / 'admin' / 'config.yml').exists():  # адрес сайта в настройках админки — от текущей сборки
-    _cfg = OUT / 'admin' / 'config.yml'
-    _cfg.write_text(_cfg.read_text(encoding='utf-8').replace('{{base}}', BASE).replace('{{site}}', SITE), encoding='utf-8')
+for _f in list((OUT / 'admin').glob('*.yml')) + list((OUT / 'admin').glob('*.html')) if (OUT / 'admin').exists() else []:
+    # адрес сайта и версия файлов — от текущей сборки (остальные {{…}} в config.yml — шаблоны самой админки)
+    _f.write_text(_f.read_text(encoding='utf-8').replace('{{base}}', BASE).replace('{{site}}', SITE).replace('{{ver}}', VER), encoding='utf-8')
 (OUT / 'js').mkdir()
 for name in ('site', 'voice', 'brief'):
     (OUT / 'js' / (name + '.js')).write_text(tokens((SRC / 'js' / (name + '.js')).read_text(encoding='utf-8')), encoding='utf-8')
