@@ -547,6 +547,15 @@ FONTS = (SRC / 'css' / 'fonts.css').read_text(encoding='utf-8').replace('url(../
 CSS = mini(FONTS + (SRC / 'css' / 'style.css').read_text(encoding='utf-8')).replace('{{base}}', BASE)
 CSS_BRIEF = mini((SRC / 'css' / 'brief.css').read_text(encoding='utf-8'))
 assert '{{' not in CSS + CSS_BRIEF
+def braces_ok(css):  # непарная скобка молча выбрасывает целый блок стилей — такую сборку не выпускаем
+    depth = 0
+    for ch in re.sub(r'"[^"]*"|\'[^\']*\'', '', css):
+        depth += (ch == '{') - (ch == '}')
+        if depth < 0:
+            return False
+    return depth == 0
+if not braces_ok(CSS) or not braces_ok(CSS_BRIEF):
+    raise SystemExit('Ошибка в стилях: непарные фигурные скобки в src/css/*.css')
 
 def logo_html():
     return '<img src="%s" alt="" width="32" height="32">' % esc(media(S['logo'])) if S.get('logo') else MARK

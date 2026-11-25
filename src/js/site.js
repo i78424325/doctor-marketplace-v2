@@ -71,12 +71,13 @@
   }
 
   /* липкая кнопка на телефоне: появляется, когда первый экран ушёл вверх; кнопки связи поднимаются над ней */
-  var sticky = $('.sticky-cta'), heroEl = $('.hero, .phero');
-  if (sticky && heroEl && IO) new IntersectionObserver(function (e) {
+  var sticky = $('.sticky-cta'), heroEl = $('.hero, .phero'), footEl = $('.footer');
+  if (heroEl && IO) new IntersectionObserver(function (e) { // первый экран ушёл вверх — кнопки связи компактнее
     var on = !e[0].isIntersecting;
-    sticky.classList.toggle('show', on);
+    if (sticky) sticky.classList.toggle('show', on);
     root.classList.toggle('sticky-on', on);
   }).observe(heroEl);
+  if (footEl && IO) new IntersectionObserver(function (e) { root.classList.toggle('foot-on', e[0].isIntersecting); }, { rootMargin: '0px 0px -40px 0px' }).observe(footEl); // в подвале свои кнопки связи
 
   /* заранее подгружаем страницу, на которую вот-вот перейдут (там, где нет speculationrules) */
   var spec = w.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('speculationrules');
@@ -421,8 +422,8 @@
     if (tip && !mem.get('dm-tip') && !qa) setTimeout(function () {
       if (chatOpen() || opened) return;
       tip.classList.add('show'); mem.set('dm-tip', '1');
-      setTimeout(hideTip, 5000);
-    }, 6000);
+      setTimeout(hideTip, 6000);
+    }, 2500);
   }
 
   /* ---------- видео-визитка ---------- */
