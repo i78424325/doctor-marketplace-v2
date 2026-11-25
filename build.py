@@ -298,9 +298,12 @@ def video_html(url, poster='', autoplay=False):
         return '<a class="video-link" href="%s" target="_blank" rel="noopener">{{icon:play}}<span>Смотреть видео</span></a>' % esc(url)
     return ('<iframe src="%s" title="Видео" loading="lazy" allow="autoplay; encrypted-media; fullscreen; picture-in-picture; screen-wake-lock" allowfullscreen></iframe>' % esc(src))
 
-def price_html(s, cls='price'):
+def price_value(s):
     p = str(s.get('price_from') or '').strip()
-    p = re.sub(r'\s*(₽|руб(\.|лей)?|р\.)$', '', re.sub(r'^от\s*', '', p, flags=re.I), flags=re.I).strip()  # «от 15000 ₽» → 15000
+    return re.sub(r'\s*(₽|руб(\.|лей)?|р\.)$', '', re.sub(r'^от\s*', '', p, flags=re.I), flags=re.I).strip()  # «от 15000 ₽» → 15000
+
+def price_html(s, cls='price'):
+    p = price_value(s)
     if p:
         p = re.sub(r'(?<=\d)(?=(\d{3})+(?!\d))', '&nbsp;', re.sub(r'\s+', '', p)) if re.fullmatch(r'[\d\s]+', p) else esc(p)
         return '<span class="%s">от <b>%s&nbsp;₽</b></span>' % (cls, p)
@@ -338,7 +341,7 @@ def bento_html():
         out.append('<a class="tile tile-%s%s" href="%s" data-reveal style="--d:%dms"><div class="tile-copy"><h3>%s</h3><p>%s</p>%s</div>'
                    '<div class="viz" aria-hidden="true">%s</div><span class="tile-go" aria-hidden="true">{{icon:arrow-up-right}}</span></a>'
                    % (slug, size, url, (k % 4) * 70, esc(s['title']), esc(s.get('tile_text') or s.get('short', '')),
-                      '' if slug == 'sait' else price_html(s), VIZ.get(slug, '')))
+                      '' if slug == 'sait' and not price_value(s) else price_html(s), VIZ.get(slug, '')))
     return ''.join(out)
 
 def answer_html(a):
@@ -503,6 +506,19 @@ def service_body(s):
         '<div style="margin-top:32px">' + cases_html(s) + '</div>'
         '<h2 class="heading-5" style="margin-top:64px">Другие услуги</h2><div class="others">' + others + '</div></div></section>' + cta_band())
 
+# «Сайт для селлера» — своя страница sait/: цена и кейсы из админки показываются на ней, только когда заполнены
+SAIT = next((s for s in SERVICES if s['slug'] == 'sait'), None)
+
+def sait_price():
+    return '<div class="price-row">%s</div>' % price_html(SAIT, 'price-lg') if SAIT and price_value(SAIT) else ''
+
+def sait_cases():
+    if not SAIT or not [c for c in (SAIT.get('cases') or []) if c.get('title')]:
+        return ''
+    return ('<section class="sec" aria-labelledby="scase-h"><div class="wrap"><div class="sec-head" data-reveal><span class="chip">Кейсы</span>'
+            '<h2 class="heading-2" id="scase-h">Результаты по услуге «%s»</h2></div><div style="margin-top:40px">%s</div></div></section>'
+            % (esc(SAIT['title']), cases_html(SAIT)))
+
 def block_html(b):
     """Блоки страниц, собранных в админке (раздел «Страницы»)."""
     t = b.get('type')
@@ -656,6 +672,7 @@ SECTIONS = {
                        for k, w in enumerate((TX.get('o_nas') or {}).get('why') or [])),
     '{{meeting}}': ''.join('<li>%s<span>%s</span></li>' % (icon(MEET_ICONS[k % len(MEET_ICONS)]), esc(t)) for k, t in enumerate((TX.get('kontakty') or {}).get('meeting') or [])),
     '{{proj-feature}}': proj_feature_html(), '{{demos}}': demos_html(), '{{viz:sait}}': VIZ.get('sait', ''),
+    '{{sait-price}}': sait_price(), '{{sait-cases}}': sait_cases(),
     '{{hero_chip}}': esc(HOME.get('hero_chip', '')), '{{hero_title}}': hero_title(), '{{hero_lead}}': esc(HOME.get('hero_lead', '')),
     '{{hero_cta}}': esc(HOME.get('hero_cta') or 'Получить бесплатную консультацию'), '{{hero-stats}}': hero_stats(), '{{video-card}}': video_card(),
     '{{who_chip}}': esc(HOME.get('who_chip', '')), '{{who_title}}': esc(HOME.get('who_title', '')),
