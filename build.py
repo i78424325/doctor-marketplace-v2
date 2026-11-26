@@ -4,7 +4,7 @@ content/ — всё, что правится в админке /admin: конт�
 src/     — шаблоны, стили, скрипты и иконки. Результат — site/ (готовые страницы для GitHub Pages или любого хостинга).
 Стили и иконки вшиваются в каждую страницу, поэтому на старте нет лишних запросов. Только стандартная библиотека Python 3.9+.
 Адрес сайта: переменные окружения SITE_BASE и SITE_URL (по умолчанию копия на GitHub Pages; для своего домена SITE_BASE=/)."""
-import html, json, os, pathlib, re, shutil, sys, time, unicodedata, urllib.parse
+import hashlib, html, json, os, pathlib, re, shutil, sys, time, unicodedata, urllib.parse
 
 P = pathlib.Path(__file__).resolve().parent
 SRC, OUT, C = P / 'src', P / 'site', P / 'content'
@@ -113,10 +113,12 @@ def msg_url(u, host):
 for _k, _host in (('telegram_url', 't.me'), ('manager_telegram_url', 't.me'), ('max_url', 'max.ru'), ('manager_max_url', 'max.ru')):
     S[_k] = msg_url(S.get(_k), _host)
 
-SERVICES = uniq([dict(s, slug=slugify(s.get('slug') or s['title']) or 'usluga') for s in jload('services.json').get('services', []) if s.get('title')], what='Услуга')
+SERVICES = uniq([dict(s, slug=slugify(s.get('slug') or s['title']) or 'usluga', _i=k) for k, s in enumerate(jload('services.json').get('services', []))
+                 if isinstance(s, dict) and s.get('title')], what='Услуга')  # _i — номер в файле, по нему конструктор находит услугу
 BY_SLUG = {s['slug']: s for s in SERVICES}
 FAQ = [i for i in jload('faq.json').get('items', []) if i.get('q')]
-STATS = [i for i in jload('stats.json').get('items', []) if i.get('value')]
+STATS_IX = [(k, i) for k, i in enumerate(jload('stats.json').get('items', [])) if isinstance(i, dict) and i.get('value')]
+STATS = [i for _, i in STATS_IX]
 STEPS = jload('steps.json')
 CLIENTS = jload('clients.json')
 DOCS = uniq(sorted(({'slug': slugify(d.get('url') or d['_file']), 'title': d.get('title') or d['_file'], 'order': num(d.get('order')),
@@ -324,11 +326,26 @@ def crumbs(*items):
 def icon(name, fallback='check-circle'):
     return '{{icon:%s}}' % (name if name in icons else fallback)
 
+# ---------- пометки для конструктора: только в версии страницы для редактора (admin/edit/), на сайте их нет ----------
+def ea(ed, name, fmt=None):
+    """Поле, которое правится прямо на странице: data-e — имя поля («.» — сам пункт списка), data-fmt — разметка ([WB], *акцент*)."""
+    return (' data-e="%s"%s' % (name, ' data-fmt="%s"' % fmt if fmt else '')) if ed else ''
+
+def el(ed, name, fixed=False, src=None):
+    """Список: data-list — поле-список; data-fixed — на странице правится только текст; data-src — общий файл (stats, founder…)."""
+    return (' data-list="%s"%s%s' % (name, ' data-fixed' if fixed else '', ' data-src="%s"' % src if src else '')) if ed else ''
+
+def ei(ed, i=None):
+    return (' data-item' + (' data-i="%d"' % i if i is not None else '')) if ed else ''
+
+def es(ed, src):
+    return ' data-src="%s"' % src if ed else ''
+
 # ---------- блоки ----------
 _vz = re.split(r'<!--@viz ([a-z0-9-]+)-->', (SRC / 'pages' / 'viz.html').read_text(encoding='utf-8'))
 VIZ = {_vz[i]: _vz[i + 1].strip() for i in range(1, len(_vz), 2)}
 
-def bento_html():
+def bento_html(ed=False):
     """Плитки услуг в порядке из админки: первая — большая (2×2), ряд добирается широкими плитками."""
     n = len(SERVICES)
     wides = (4 - (n + 3) % 4) % 4 if n > 1 else 0
@@ -338,9 +355,10 @@ def bento_html():
         slug = s['slug']
         size = ' tile-big' if k == 0 else (' tile-wide' if k in wide else '')
         url = '{{base}}sait/' if slug == 'sait' else '{{base}}uslugi/%s/' % slug
-        out.append('<a class="tile tile-%s%s" href="%s" data-reveal style="--d:%dms"><div class="tile-copy"><h3>%s</h3><p>%s</p>%s</div>'
+        out.append('<a class="tile tile-%s%s" href="%s" data-reveal style="--d:%dms"%s><div class="tile-copy"><h3%s>%s</h3><p%s>%s</p>%s</div>'
                    '<div class="viz" aria-hidden="true">%s</div><span class="tile-go" aria-hidden="true">{{icon:arrow-up-right}}</span></a>'
-                   % (slug, size, url, (k % 4) * 70, esc(s['title']), esc(s.get('tile_text') or s.get('short', '')),
+                   % (slug, size, url, (k % 4) * 70, ei(ed, s['_i']), ea(ed, 'title'), esc(s['title']),
+                      ea(ed, 'tile_text'), esc(s.get('tile_text') or s.get('short', '')),
                       '' if slug == 'sait' and not price_value(s) else price_html(s), VIZ.get(slug, '')))
     return ''.join(out)
 
@@ -354,31 +372,34 @@ def faq_html(items):
     return ''.join('<details><summary>%s<span class="pm">{{icon:plus}}</span></summary><div class="ans">%s</div></details>'
                    % (esc(i['q']), answer_html(i.get('a'))) for i in items)
 
-def steps_html(items, compact=False):
+def steps_html(items, compact=False, ed=False, lst='items'):
     line = '' if compact else '<div class="steps-line" aria-hidden="true"><i></i></div>'
     cls = ' compact' if compact else (' three' if len(items) == 3 else '')
-    body = ''.join('<div class="step"%s><span class="num">%02d</span><div><h3>%s</h3><p>%s</p></div></div>'
-                   % ('' if compact else ' data-reveal style="--d:%dms"' % (k * 100), k + 1, esc(i.get('title', '')), esc(i.get('text', '')))
+    body = ''.join('<div class="step"%s%s><span class="num">%02d</span><div><h3%s>%s</h3><p%s>%s</p></div></div>'
+                   % ('' if compact else ' data-reveal style="--d:%dms"' % (k * 100), ei(ed, k), k + 1,
+                      ea(ed, 'title'), esc(i.get('title', '')), ea(ed, 'text'), esc(i.get('text', '')))
                    for k, i in enumerate(items))
-    return '<div class="steps%s">%s%s</div>' % (cls, line, body)
+    return '<div class="steps%s"%s>%s%s</div>' % (cls, el(ed, lst, True, 'steps'), line, body)
 
 def stat_value(v):
     return esc(html.unescape(str(v))).replace(' ', '&nbsp;').replace('\xa0', '&nbsp;')
 
-def stats_html():
-    return '<div class="stats">' + ''.join('<div class="stat" data-reveal style="--d:%dms"><b>%s</b><span>%s</span></div>'
-                                           % (k * 60, stat_value(i['value']), esc(i.get('label', ''))) for k, i in enumerate(STATS)) + '</div>'
+def stats_html(ed=False):
+    return '<div class="stats"%s>' % el(ed, 'items', True, 'stats') + ''.join(
+        '<div class="stat" data-reveal style="--d:%dms"%s><b%s>%s</b><span%s>%s</span></div>'
+        % (n * 60, ei(ed, k), ea(ed, 'value'), stat_value(i['value']), ea(ed, 'label'), esc(i.get('label', ''))) for n, (k, i) in enumerate(STATS_IX)) + '</div>'
 
-def tagline_html():
+def tagline_words(text):
+    """Главная мысль по словам: *слова* — фирменным цветом, слова проявляются по очереди."""
     words, i = [], 0
-    for seg in re.split(r'(\*[^*]+\*)', HOME.get('tagline', '')):
+    for seg in re.split(r'(\*[^*]+\*)', str(text or '')):
         acc = seg.startswith('*')
         for w in seg.strip('*').split():
             words.append('<span class="w%s" style="--i:%d">%s</span>' % (' acc' if acc else '', i, esc(w)))
             i += 1
-    return '<section class="tagline" aria-label="Наш подход"><div class="wrap"><p>%s</p></div></section>' % ' '.join(words)
+    return ' '.join(words)
 
-def clients_html():
+def clients_html(ed=False):
     logos = [l for l in (CLIENTS.get('logos') or []) if l.get('image')]
     if logos:
         def one(l):
@@ -389,28 +410,30 @@ def clients_html():
             items += ''.join(one(l) for l in logos)
     else:  # логотипов пока нет — аккуратные места под них, чтобы было видно, как работает строка
         items = ''.join('<li class="ph">{{icon:image}}<span>Логотип клиента</span></li>' for _ in range(7))
-    return ('<section class="clients" aria-labelledby="cl-h"><div class="wrap clients-head"><h2 class="clients-h" id="cl-h">%s</h2></div>'
+    return ('<section class="clients" aria-labelledby="cl-h"><div class="wrap clients-head"><h2 class="clients-h" id="cl-h"%s>%s</h2></div>'
             '<div class="marquee"><div class="marquee-in"><ul>%s</ul><ul aria-hidden="true">%s</ul></div></div></section>'
-            % (esc(CLIENTS.get('title') or 'Наши клиенты'), items, items))
+            % (es(ed, 'clients') + ea(ed, 'title'), esc(CLIENTS.get('title') or 'Наши клиенты'), items, items))
 
-def who_html():
+def who_html(cards, ed=False):
     out = []
-    for k, w in enumerate(HOME.get('who') or []):
-        out.append('<article class="card" data-reveal style="--d:%dms"><span class="n">%s</span><h3 class="heading-6">%s</h3><ul class="checks">%s</ul>%s</article>'
-                   % (k * 80, esc(w.get('label', '')), accent(w.get('title', '')),
-                      ''.join('<li>{{icon:check-circle}}<span>%s</span></li>' % esc(t) for t in w.get('items') or []),
-                      '<a class="link-arrow link-acc" href="%s"><span>%s</span>{{icon:arrow-right}}</a>' % (esc(href(w.get('link'), BASE + 'uslugi/')), esc(w['link_text'])) if w.get('link_text') else ''))
+    for k, w in enumerate(c for c in cards or [] if isinstance(c, dict)):
+        out.append('<article class="card" data-reveal style="--d:%dms"%s><span class="n"%s>%s</span><h3 class="heading-6"%s>%s</h3><ul class="checks"%s>%s</ul>%s</article>'
+                   % (k * 80, ei(ed), ea(ed, 'label'), esc(w.get('label', '')), ea(ed, 'title', 'accent'), accent(w.get('title', '')), el(ed, 'items'),
+                      ''.join('<li%s>{{icon:check-circle}}<span%s>%s</span></li>' % (ei(ed), ea(ed, '.'), esc(t)) for t in w.get('items') or []),
+                      '<a class="link-arrow link-acc" href="%s"><span%s>%s</span>{{icon:arrow-right}}</a>' % (esc(href(w.get('link'), BASE + 'uslugi/')), ea(ed, 'link_text'), esc(w['link_text'])) if w.get('link_text') else ''))
     return ''.join(out)
 
-F = HOME.get('founder') or {}
-def founder_html(cta):
+# основатель — свой файл content/founder.json (правится в конструкторе прямо на главной); в старых версиях лежал внутри home.json
+F = jload('founder.json') or (HOME.get('founder') if isinstance(HOME.get('founder'), dict) else None) or {}
+def founder_html(cta, ed=False):
     photo = media(F.get('photo')) or BASE + 'img/artem.webp'
-    return ('<div class="founder"><div class="portrait" data-reveal><img src="%s" alt="%s" width="336" height="336" loading="lazy" decoding="async">'
-            '<span class="chip"><i class="dot"></i>Основатель компании</span></div><div data-reveal style="--d:100ms"><span class="chip">%s</span>'
-            '<h2 class="heading-2" style="margin-top:16px">%s</h2><p class="lead" style="margin-top:8px">%s</p><ul class="checks">%s</ul>'
+    return ('<div class="founder"%s><div class="portrait" data-reveal><img src="%s" alt="%s" width="336" height="336" loading="lazy" decoding="async"%s>'
+            '<span class="chip"><i class="dot"></i>Основатель компании</span></div><div data-reveal style="--d:100ms"><span class="chip"%s>%s</span>'
+            '<h2 class="heading-2" style="margin-top:16px"%s>%s</h2><p class="lead" style="margin-top:8px"%s>%s</p><ul class="checks"%s>%s</ul>'
             '<div class="hero-cta">%s</div></div></div>'
-            % (esc(photo), esc('%s — %s' % (F.get('name', ''), F.get('role', ''))), esc(F.get('chip') or 'Кто ведёт ваш магазин'),
-               esc(F.get('name', '')), esc(F.get('role', '')), ''.join('<li>{{icon:seal-check}}<span>%s</span></li>' % esc(t) for t in F.get('items') or []), cta))
+            % (es(ed, 'founder'), esc(photo), esc('%s — %s' % (F.get('name', ''), F.get('role', ''))), ea(ed, 'photo') + (' data-img' if ed else ''),
+               ea(ed, 'chip'), esc(F.get('chip') or 'Кто ведёт ваш магазин'), ea(ed, 'name'), esc(F.get('name', '')), ea(ed, 'role'), esc(F.get('role', '')),
+               el(ed, 'items'), ''.join('<li%s>{{icon:seal-check}}<span%s>%s</span></li>' % (ei(ed), ea(ed, '.'), esc(t)) for t in F.get('items') or []), cta))
 
 def news_cards(items):
     if not items:
@@ -423,24 +446,26 @@ def news_cards(items):
                    % (n['slug'], cover, esc(n['date']), ru_date(n['date']), esc(n['title']), esc(n['excerpt'])))
     return '<div class="news-grid%s">' % (' news-one' if len(out) == 1 else '') + ''.join(out) + '</div>'
 
-def hero_title():
-    t = esc(HOME.get('hero_title', ''))
+def hero_title(raw):
+    t = esc(raw or '')
     t = re.sub(r'(^|\s)(\S{1,2}) (?=\[)', lambda m: m.group(1) + m.group(2) + '&nbsp;', t)  # «на», «и», «в» не висят в конце строки
     t = t.replace('[WB]', '<span class="mk mk-wb">Wildberries</span>').replace('[OZON]', '<span class="mk mk-ozon">Ozon</span>')
     return re.sub(r'\[([^\]]+)\]', r'<span class="lead-word">\1</span>', t)
 
-def hero_stats():
-    return ''.join('<div class="num"><b>%s</b><span>%s</span></div>' % (stat_value(i['value']), esc(i.get('label', ''))) for i in STATS[:2])
+def hero_stats(ed=False):
+    return ''.join('<div class="num"%s><b%s>%s</b><span%s>%s</span></div>' % (ei(ed, k), ea(ed, 'value'), stat_value(i['value']), ea(ed, 'label'), esc(i.get('label', '')))
+                   for k, i in STATS_IX[:2])
 
-def video_card():
+def video_card(ed=False):
     """Видео-визитка на первом экране. Пока видео нет — обложка «скоро» с фото основателя."""
     url, poster = VIDEO.get('url') or S.get('video_url', ''), VIDEO.get('poster') or S.get('video_poster', '')
     cap = esc(VIDEO.get('caption') or S.get('video_caption') or 'Видео-визитка основателя')
     who = esc('%s · %s' % (F.get('name', ''), 'основатель компании'))
     face = media(F.get('photo')) or BASE + 'img/artem.webp'
     bg = ('<img class="vc-poster" src="%s" alt="" decoding="async" fetchpriority="high">' % esc(media(poster))) if poster else \
-         ('<span class="vc-rings" aria-hidden="true"></span><span class="vc-face"><img src="%s" alt="" width="336" height="336" decoding="async"></span>' % esc(face))
-    body = '%s<span class="vplay" aria-hidden="true"><i></i>{{icon:play}}</span><span class="vcap"><b>%s</b><span>%s</span></span>' % (bg, cap, who)
+         ('<span class="vc-rings" aria-hidden="true"></span><span class="vc-face"><img src="%s" alt="" width="336" height="336" decoding="async"%s></span>'
+          % (esc(face), es(ed, 'founder') + ea(ed, 'photo') + (' data-img' if ed else '')))
+    body = '%s<span class="vplay" aria-hidden="true"><i></i>{{icon:play}}</span><span class="vcap"><b%s>%s</b><span>%s</span></span>' % (bg, es(ed, 'video') + ea(ed, 'caption'), cap, who)
     if url:
         return ('<button class="vcard%s" type="button" data-video aria-label="Смотреть: %s">%s</button><template id="video-tpl">%s</template>'
                 % (' has-poster' if poster else '', cap, body, video_html(url, poster, autoplay=True)))
@@ -477,12 +502,13 @@ def cases_html(s):
                       '<ul class="case-nums">%s</ul>' % res if res else '', md(c.get('text', ''))))
     return '<div class="cases">' + ''.join(out) + '</div>'
 
-def cta_band(title=None, text=None, button=None):
+def cta_band(title=None, text=None, button=None, ed=False):
     t = TX.get('cta') or {}
     return ('<section class="sec" aria-label="Бесплатная консультация"><div class="wrap"><div class="cta-band" data-reveal>'
-            '<div><h2 class="heading-3">%s</h2><p>%s</p></div>'
-            '<div class="hero-cta"><a class="btn btn-primary btn-lg btn-shine" href="{{base}}kontakty/" data-lead><span>%s</span>{{icon:arrow-right}}</a></div></div></div></section>'
-            % (esc(title or t.get('title') or 'Начните с бесплатной консультации'), esc(text or t.get('text') or ''), esc(button or t.get('button') or 'Записаться')))
+            '<div><h2 class="heading-3"%s>%s</h2><p%s>%s</p></div>'
+            '<div class="hero-cta"><a class="btn btn-primary btn-lg btn-shine" href="{{base}}kontakty/" data-lead><span%s>%s</span>{{icon:arrow-right}}</a></div></div></div></section>'
+            % (ea(ed, 'title'), esc(title or t.get('title') or 'Начните с бесплатной консультации'), ea(ed, 'text'), esc(text or t.get('text') or ''),
+               ea(ed, 'button'), esc(button or t.get('button') or 'Записаться')))
 
 OPTIONS = '<option value="">Пока не знаю</option>' + ''.join('<option value="%s">%s</option>' % (s['slug'], esc(s['title'])) for s in SERVICES)
 
@@ -552,6 +578,154 @@ def block_html(b):
         return cta_band(b.get('title'), b.get('text'), b.get('button'))
     return ''
 
+# ---------- конструктор: страница из блоков (сейчас — главная). Блок: {id, type, data, style, hidden} ----------
+# Сайт собирается дважды: обычная страница и версия для редактора admin/edit/ — с пометками полей и скрытыми блоками.
+BG = {'page': 'var(--bg)', 'alt': 'var(--bg2)', 'white': 'var(--s1)', 'mint': '#E7F2EB', 'sand': '#F5EFE3'}
+
+def hid(b, base):
+    """id заголовка блока: у копии блока свой, чтобы на странице не было двух одинаковых."""
+    return base if b['id'] == b['type'] else '%s-%s' % (base, b['id'])
+
+def head_html(b, d, ed, h_id, chip_default='', title_default='', link=None):
+    """Шапка секции: чип и заголовок; link — ссылка справа («Все услуги»)."""
+    head = '<div class="sec-head"%s><span class="chip"%s>%s</span><h2 class="heading-2" id="%s"%s>%s</h2></div>' % (
+        '' if link else ' data-reveal', ea(ed, 'chip'), esc(d.get('chip') or chip_default), hid(b, h_id), ea(ed, 'title'), esc(d.get('title') or title_default))
+    if link:
+        return '<div class="sec-head-row" data-reveal>%s<a class="link-arrow" href="%s"><span>%s</span>{{icon:arrow-right}}</a></div>' % (head, link[0], link[1])
+    return head
+
+def blk_hero(b, d, ed):
+    chip = '<span%s>%s</span>' % (ea(ed, 'chip'), esc(d.get('chip', ''))) if ed else esc(d.get('chip', ''))
+    return ('<section class="hero" aria-labelledby="%s"><div class="grid-bg" aria-hidden="true"></div><div class="glow glow-a" aria-hidden="true"></div>'
+            '<div class="glow glow-b" aria-hidden="true"></div><div class="wrap hero-grid"><div class="hero-copy">'
+            '<span class="chip hi-in"><i class="dot"></i>%s</span><h1 class="display hi-in" id="%s" style="--d:60ms"%s>%s</h1>'
+            '<p class="lead hi-in" style="--d:120ms"%s>%s</p><div class="hero-cta hi-in" style="--d:180ms">'
+            '<a class="btn btn-primary btn-lg btn-shine" href="{{base}}kontakty/" data-lead><span%s>%s</span>{{icon:arrow-right}}</a>'
+            '<a class="link-arrow" href="{{base}}uslugi/"><span>Все услуги</span>{{icon:arrow-right}}</a></div>'
+            '<div class="trust hi-in" style="--d:240ms"%s>%s</div></div><div class="hero-art hi-in" style="--d:140ms">%s</div></div></section>'
+            % (hid(b, 'hero-h'), chip, hid(b, 'hero-h'), ea(ed, 'title', 'hero'), hero_title(d.get('title')), ea(ed, 'lead'), esc(d.get('lead', '')),
+               ea(ed, 'button'), esc(d.get('button') or 'Получить бесплатную консультацию'), el(ed, 'items', True, 'stats'), hero_stats(ed), video_card(ed)))
+
+def blk_who(b, d, ed):
+    return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="who"%s>%s</div></div></section>'
+            % (hid(b, 'who-h'), head_html(b, d, ed, 'who-h'), el(ed, 'cards'), who_html(d.get('cards'), ed)))
+
+def blk_services(b, d, ed):
+    return ('<section class="sec sec-alt" aria-labelledby="%s"><div class="wrap">%s<div class="bento bento-scroll"%s>%s</div>'
+            '<p class="swipe-hint">{{icon:arrow-right}}Листайте карточки</p></div></section>'
+            % (hid(b, 'svc-h'), head_html(b, d, ed, 'svc-h', link=('{{base}}uslugi/', 'Все услуги')), el(ed, 'services', True, 'services'), bento_html(ed)))
+
+def blk_stats(b, d, ed):
+    return ('<section class="sec sec-tight" aria-labelledby="%s"><div class="wrap"><h2 class="visually-hidden" id="%s">Опыт в цифрах</h2>%s</div></section>'
+            % (hid(b, 'num-h'), hid(b, 'num-h'), stats_html(ed)))
+
+def blk_tagline(b, d, ed):
+    return '<section class="tagline" aria-label="Наш подход"><div class="wrap"><p%s>%s</p></div></section>' % (ea(ed, 'text', 'tagline'), tagline_words(d.get('text')))
+
+def blk_founder(b, d, ed):
+    return ('<section class="sec" aria-label="Основатель компании"><div class="wrap">%s</div></section>'
+            % founder_html('<a class="btn btn-ghost" href="{{base}}o-nas/"><span>О компании</span>{{icon:arrow-right}}</a>', ed))
+
+def blk_news(b, d, ed):
+    return ('<section class="sec sec-alt" aria-labelledby="%s"><div class="wrap">%s<div style="margin-top:40px">%s</div></div></section>'
+            % (hid(b, 'news-h'), head_html(b, d, ed, 'news-h', link=('{{base}}novosti/', 'Все новости')), news_cards(NEWS[:3])))
+
+def blk_steps(b, d, ed):
+    return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s%s</div></section>'
+            % (hid(b, 'how-h'), head_html(b, d, ed, 'how-h', 'Как мы работаем', 'Четыре шага от первой встречи до стабильного роста'),
+               steps_html(STEPS.get('items') or [], ed=ed)))
+
+def blk_faq(b, d, ed):
+    return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="faq" style="margin-top:40px;max-width:880px">%s</div></div></section>'
+            % (hid(b, 'hfaq-h'), head_html(b, d, ed, 'hfaq-h', 'Вопрос — ответ', 'Частые вопросы', ('{{base}}voprosy/', 'Все вопросы')),
+               faq_html([i for i in FAQ if i.get('topic') != 'site'][:6])))
+
+def blk_cta(b, d, ed):
+    return cta_band(d.get('title'), d.get('text'), d.get('button'), ed)
+
+BLOCKS = {  # тип → (название в конструкторе, что внутри, сборка)
+    'hero': ('Первый экран', 'Заголовок, кнопка записи, видео-визитка', blk_hero),
+    'clients': ('Наши клиенты', 'Бегущая строка с логотипами', lambda b, d, ed: clients_html(ed)),
+    'who': ('Это про вас?', 'Карточки «кому поможем» со списками', blk_who),
+    'services': ('Услуги', 'Плитки услуг с ценами', blk_services),
+    'stats': ('Цифры', 'Опыт в цифрах', blk_stats),
+    'tagline': ('Главная мысль', 'Крупная фраза, слова проявляются по очереди', blk_tagline),
+    'founder': ('Основатель', 'Фото, имя и достижения', blk_founder),
+    'news': ('Новости', 'Три последние новости', blk_news),
+    'steps': ('Как мы работаем', 'Шаги работы по порядку', blk_steps),
+    'faq': ('Вопросы и ответы', 'Частые вопросы, раскрываются по нажатию', blk_faq),
+    'cta': ('Призыв записаться', 'Тёмная плашка с кнопкой записи', blk_cta),
+}
+BLOCK_DEFAULTS = {  # с чем появляется новый блок из списка «Добавить блок» (дальше текст правится на месте)
+    'hero': {'chip': 'Эксперты по Wildberries и Ozon', 'title': 'Заголовок с [акцентом]', 'lead': 'Коротко: что вы делаете и для кого.', 'button': 'Получить бесплатную консультацию'},
+    'who': {'chip': 'Это про вас?', 'title': 'Заголовок блока', 'cards': [{'label': '01 · Этап', 'title': 'Вы *описание ситуации* клиента', 'items': ['Что сделаем', 'Что получит клиент'], 'link_text': '', 'link': ''}]},
+    'services': {'chip': 'Услуги', 'title': 'Полный спектр услуг для вашего успеха на маркетплейсах'},
+    'tagline': {'text': 'Главная мысль компании — *важные слова* выделяются цветом.'},
+    'news': {'chip': 'Новости', 'title': 'Новости и статьи'},
+}
+
+def norm_blocks(blocks):
+    """У каждого блока — понятный уникальный id и словари data/style; незнакомые типы сохраняются как есть (на сайте их нет)."""
+    out, seen = [], set()
+    for b in blocks or []:
+        if not isinstance(b, dict):
+            continue
+        t = str(b.get('type') or '')
+        bid = re.sub(r'[^a-z0-9-]', '', str(b.get('id') or '').lower()) or re.sub(r'[^a-z0-9-]', '', t.lower()) or 'blok'
+        base, k = bid, 2
+        while bid in seen:
+            bid, k = '%s-%d' % (base, k), k + 1
+        seen.add(bid)
+        out.append(dict(b, id=bid, type=t, data=b.get('data') if isinstance(b.get('data'), dict) else {}, style=b.get('style') if isinstance(b.get('style'), dict) else {}))
+    return out
+
+def decorate(h, b, ed):
+    """Оформление блока из конструктора — на первый тег блока: свои отступы, фон, показ только на компьютере или только на телефоне."""
+    st, cls, css = b.get('style') or {}, [], []
+    for k in ('pt', 'pb', 'ptm', 'pbm'):
+        v = str(st.get(k, '')).strip()
+        if re.fullmatch(r'\d{1,3}', v):
+            cls.append('blk-' + k)
+            css.append('--%s:%dpx' % (k, min(int(v), 400)))
+    bg = BG.get(st.get('bg')) or (st['bg'] if re.fullmatch(r'#[0-9a-fA-F]{6}', str(st.get('bg') or '')) else '')
+    if bg:
+        cls.append('blk-bg')
+        css.append('--bgc:%s' % bg)
+    cls += {'desktop': ['blk-hm'], 'mobile': ['blk-hd']}.get(st.get('show'), [])
+    if b.get('hidden'):
+        cls.append('blk-off')
+    extra = ' data-blk="%s" data-type="%s"' % (b['id'], b['type']) if ed else ''
+    m = re.match(r'(\s*<[a-z0-9]+)([^>]*)>', h)
+    if not m or not (cls or css or extra):
+        return h
+    attrs = m.group(2)
+    if cls:
+        attrs = re.sub(r'\sclass="([^"]*)"', lambda x: ' class="%s %s"' % (x.group(1), ' '.join(cls)), attrs, count=1) if ' class="' in attrs else attrs + ' class="%s"' % ' '.join(cls)
+    if css:
+        attrs = re.sub(r'\sstyle="([^"]*)"', lambda x: ' style="%s;%s"' % (x.group(1).rstrip(';'), ';'.join(css)), attrs, count=1) if ' style="' in attrs else attrs + ' style="%s"' % ';'.join(css)
+    return m.group(1) + attrs + extra + '>' + h[m.end():]
+
+def render_blocks(blocks, ed=False):
+    return ''.join(decorate(BLOCKS[b['type']][2](b, b['data'], ed), b, ed) for b in blocks if b['type'] in BLOCKS and (ed or not b.get('hidden')))
+
+def legacy_home(raw):
+    """Главная в старом виде (content/home.json: hero, who, … и порядок sections) → блоки. Нужна, если сайт откатили к версии до конструктора."""
+    h = flat_home(raw)
+    data = {'hero': {'chip': h.get('hero_chip', ''), 'title': h.get('hero_title', ''), 'lead': h.get('hero_lead', ''), 'button': h.get('hero_cta', '')},
+            'who': {'chip': h.get('who_chip', ''), 'title': h.get('who_title', ''), 'cards': h.get('who') or []},
+            'services': {'chip': h.get('services_chip', ''), 'title': h.get('services_title', '')},
+            'news': {'chip': h.get('news_chip', ''), 'title': h.get('news_title', '')},
+            'tagline': {'text': h.get('tagline', '')}}
+    order = ['hero'] + [s.get('type') if isinstance(s, dict) else s for s in h.get('sections') or []]
+    return {'title': 'Главная', 'blocks': [{'id': t, 'type': t, 'data': data.get(t, {}), 'style': {}} for t in order if t in BLOCKS]}
+
+def load_home():
+    d = jload('site/home.json')
+    if not (isinstance(d, dict) and isinstance(d.get('blocks'), list)):
+        d = legacy_home(jload('home.json'))
+    d['blocks'] = norm_blocks(d['blocks'])
+    return d
+
 # ---------- стили ----------
 def mini(css):
     css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
@@ -612,7 +786,7 @@ def widgets_html():
         out = out.replace(k, v)
     return out
 
-def page(key, title, desc, body, sticky=True, scripts=('site',), head=''):
+def page(key, title, desc, body, sticky=True, scripts=('site',), head='', noindex=False):
     def a(k, url, label, li=False):
         x = '<a href="{{base}}%s"%s>%s</a>' % (url, ' aria-current="page"' if k == key else '', label)
         return '<li>%s</li>' % x if li else x
@@ -622,7 +796,7 @@ def page(key, title, desc, body, sticky=True, scripts=('site',), head=''):
                  ('{{fnav}}', a('home', '', 'Главная', True) + ''.join(a(*n, li=True) for n in NAV) + a('sait', 'sait/', 'Сайт для селлера', True)),
                  ('{{fdocs}}', ''.join('<li><a href="{{base}}dokumenty/%s/">%s</a></li>' % (d['slug'], esc(d['title'])) for d in DOCS)),
                  ('{{footer_text}}', esc(S.get('footer_text', ''))), ('{{widgets}}', widgets_html()),
-                 ('{{robots}}', 'index, follow' if INDEX else 'noindex, nofollow'),
+                 ('{{robots}}', 'index, follow' if INDEX and not noindex else 'noindex, nofollow'),
                  ('{{title}}', esc(title)), ('{{desc}}', esc(desc)), ('{{head}}', head),
                  ('{{scripts}}', ''.join('<script src="{{base}}js/%s.js?v={{ver}}" defer></script>' % s for s in scripts)),
                  ('{{sticky}}', STICKY if sticky else '')):
@@ -659,25 +833,16 @@ def demos_html():
 
 # ---------- сборка страниц ----------
 MEET_ICONS = ['calendar-check', 'chart-line-up', 'chats-circle', 'seal-check', 'clock']
-HP = re.split(r'<!--@section ([a-z0-9-]+)-->', (SRC / 'pages' / 'home.html').read_text(encoding='utf-8'))
-HOME_SEC = {HP[i]: HP[i + 1] for i in range(1, len(HP), 2)}
 SECTIONS = {
-    '{{bento}}': bento_html(), '{{stats}}': stats_html(), '{{tagline}}': tagline_html(), '{{cta-band}}': cta_band(),
-    '{{clients}}': clients_html(), '{{news-cards}}': news_cards(NEWS[:3]), '{{news-all}}': news_cards(NEWS), '{{who-cards}}': who_html(),
-    '{{founder-home}}': founder_html('<a class="btn btn-ghost" href="{{base}}o-nas/"><span>О компании</span>{{icon:arrow-right}}</a>'),
+    '{{bento}}': bento_html(), '{{stats}}': stats_html(), '{{cta-band}}': cta_band(), '{{news-all}}': news_cards(NEWS),
     '{{founder-about}}': founder_html('<a class="btn btn-primary btn-shine" href="{{base}}kontakty/" data-lead><span>Получить бесплатную консультацию</span>{{icon:arrow-right}}</a>'),
     '{{steps}}': steps_html(STEPS.get('items') or []), '{{site-steps}}': steps_html(STEPS.get('site') or []), '{{service-options}}': OPTIONS,
-    '{{faq-all}}': faq_html(FAQ), '{{faq-home}}': faq_html([i for i in FAQ if i.get('topic') != 'site'][:6]), '{{faq-site}}': faq_html([i for i in FAQ if i.get('topic') == 'site']), '{{consents-form}}': consents('f'),
+    '{{faq-all}}': faq_html(FAQ), '{{faq-site}}': faq_html([i for i in FAQ if i.get('topic') == 'site']), '{{consents-form}}': consents('f'),
     '{{why}}': ''.join('<div class="card" data-reveal style="--d:%dms"><span class="ic">%s</span><p>%s</p></div>' % (k * 60, icon(w.get('icon')), esc(w.get('text', '')))
                        for k, w in enumerate((TX.get('o_nas') or {}).get('why') or [])),
     '{{meeting}}': ''.join('<li>%s<span>%s</span></li>' % (icon(MEET_ICONS[k % len(MEET_ICONS)]), esc(t)) for k, t in enumerate((TX.get('kontakty') or {}).get('meeting') or [])),
     '{{proj-feature}}': proj_feature_html(), '{{demos}}': demos_html(), '{{viz:sait}}': VIZ.get('sait', ''),
     '{{sait-price}}': sait_price(), '{{sait-cases}}': sait_cases(),
-    '{{hero_chip}}': esc(HOME.get('hero_chip', '')), '{{hero_title}}': hero_title(), '{{hero_lead}}': esc(HOME.get('hero_lead', '')),
-    '{{hero_cta}}': esc(HOME.get('hero_cta') or 'Получить бесплатную консультацию'), '{{hero-stats}}': hero_stats(), '{{video-card}}': video_card(),
-    '{{who_chip}}': esc(HOME.get('who_chip', '')), '{{who_title}}': esc(HOME.get('who_title', '')),
-    '{{services_chip}}': esc(HOME.get('services_chip', '')), '{{services_title}}': esc(HOME.get('services_title', '')),
-    '{{news_chip}}': esc(HOME.get('news_chip', '')), '{{news_title}}': esc(HOME.get('news_title', '')),
     '{{phero-bg}}': '<div class="grid-bg" aria-hidden="true"></div><div class="glow glow-a" aria-hidden="true"></div>',
     '{{doc-links}}': ''.join('<a href="{{base}}dokumenty/%s/">%s</a>' % (d['slug'], esc(d['title'])) for d in DOCS),
 }
@@ -688,8 +853,8 @@ def fill(text, crumb=None):
     text = re.sub(r'\{\{t:([a-z_]+)\.([a-z_]+)\}\}', lambda m: esc(str((TX.get(m.group(1)) or {}).get(m.group(2), ''))), text)
     return text.replace('{{crumbs}}', crumbs(crumb) if crumb else '')
 
-order = [b.get('type') if isinstance(b, dict) else b for b in HOME.get('sections') or []]
-home = fill(HOME_SEC['hero'] + ''.join(HOME_SEC.get(t, '') for t in order))
+HOME_DOC = load_home()
+home = fill(render_blocks(HOME_DOC['blocks']))
 parts = re.split(r'<!--@page ([a-z0-9-]+)-->', (SRC / 'pages' / 'inner.html').read_text(encoding='utf-8'))
 inner = {parts[i]: parts[i + 1] for i in range(1, len(parts), 2)}
 FAQ_LD = '<script type="application/ld+json">%s</script>' % json.dumps({'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
@@ -759,6 +924,31 @@ for name in ('site', 'voice', 'brief'):
 for path, text in PAGES_OUT:
     (OUT / path).mkdir(parents=True, exist_ok=True)
     (OUT / path / 'index.html').write_text(text, encoding='utf-8')
+
+# ---------- конструктор: версия главной для редактора (с пометками полей и скрытыми блоками) и его данные ----------
+REV = os.environ.get('GITHUB_SHA') or 'local'  # какая версия репозитория собрана — конструктор сверяет её с последней правкой
+def blob_sha(rel):
+    """Отпечаток файла как в git: конструктор проверяет, не изменили ли файл в админке, пока он был открыт."""
+    f = C / rel
+    if not f.exists():
+        return None
+    b = f.read_bytes()
+    return hashlib.sha1(b'blob %d\x00' % len(b) + b).hexdigest()
+LIB = {t: tokens(fill(render_blocks(norm_blocks([{'id': 'zznewzz', 'type': t, 'data': BLOCK_DEFAULTS.get(t, {})}]), True))).replace(' — ', ' — ')
+       for t in BLOCKS}  # заготовки для «Добавить блок»; zznewzz конструктор меняет на id нового блока
+EDIT_DATA = {
+    'rev': REV, 'ver': VER, 'repo': os.environ.get('GITHUB_REPOSITORY') or 'i78424325/doctor-marketplace-v2', 'branch': 'main',
+    'page': {'key': 'home', 'title': HOME_DOC.get('title') or 'Главная', 'url': BASE, 'file': 'content/site/home.json', 'sha': blob_sha('site/home.json')},
+    'doc': HOME_DOC,
+    'sources': {n: {'file': 'content/%s.json' % n, 'doc': (F if n == 'founder' else jload('%s.json' % n)) or {}, 'sha': blob_sha('%s.json' % n)}
+                for n in ('stats', 'founder', 'services', 'clients', 'steps', 'video')},
+    'types': {t: {'name': v[0], 'about': v[1]} for t, v in BLOCKS.items()},
+    'defaults': BLOCK_DEFAULTS, 'library': LIB, 'bg': BG,
+}
+(OUT / 'admin' / 'edit').mkdir(parents=True, exist_ok=True)
+(OUT / 'admin' / 'edit' / 'index.html').write_text(page('home', 'Конструктор — %s' % COMPANY, '', fill(render_blocks(HOME_DOC['blocks'], True)), noindex=True,
+                                                        head='<meta name="dm-rev" content="%s">' % esc(REV)), encoding='utf-8')
+(OUT / 'admin' / 'edit' / 'data.json').write_text(json.dumps(EDIT_DATA, ensure_ascii=False), encoding='utf-8')
 (OUT / '404.html').write_text(page('404', 'Страница не найдена — %s' % COMPANY, 'Такой страницы нет.', fill(inner['404']), sticky=False), encoding='utf-8')
 brief = tokens((SRC / 'brief' / 'index.html').read_text(encoding='utf-8')).replace('{{css}}', CSS + CSS_BRIEF)
 (OUT / 'brief').mkdir()

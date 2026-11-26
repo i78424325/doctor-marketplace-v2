@@ -184,10 +184,12 @@
       '#dmj a,#dmj button{font:inherit}#dmj .b{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:#0F3B2A;color:#fff;text-decoration:none;box-shadow:0 8px 24px -10px rgba(0,0,0,.5);opacity:.92}' +
       '#dmj .b:hover{opacity:1}#dmj .c{max-width:300px;padding:14px;border-radius:16px;background:#fff;color:#121C16;box-shadow:0 0 0 1px rgba(16,32,24,.12),0 18px 44px -18px rgba(16,32,24,.35)}' +
       '#dmj .c p{margin:0 0 8px}#dmj .c small{display:block;margin-top:8px;color:#56625C;font-size:12px;line-height:16px}#dmj input{width:100%;padding:8px 10px;border:1px solid rgba(16,32,24,.2);border-radius:10px;font:inherit}' +
-      '#dmj .ok{margin-top:8px;padding:8px 12px;border:0;border-radius:999px;background:#4EB679;color:#0B1A12;font-weight:700;cursor:pointer}';
+      '#dmj .ok{margin-top:8px;padding:8px 12px;border:0;border-radius:999px;background:#4EB679;color:#0B1A12;font-weight:700;cursor:pointer}' +
+      '#dmj .k{background:#4EB679;color:#0B1A12;font-weight:700;opacity:1}#dmj .k:hover{background:#45A96E}';
     var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     var box = document.createElement('div'); box.id = 'dmj';
-    box.innerHTML = '<a class="b" href="zhurnal.html" target="_blank" rel="noopener">Журнал правок и откат</a>';
+    box.innerHTML = '<a class="b k" href="konstruktor.html" target="_blank" rel="noopener">Конструктор: правка прямо на странице</a>' +
+      '<a class="b" href="zhurnal.html" target="_blank" rel="noopener">Журнал правок и откат</a>';
     document.body.appendChild(box);
     var ask = function () {
       if (who() || !token() || box.querySelector('.c')) return;

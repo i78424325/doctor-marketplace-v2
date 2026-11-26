@@ -4,7 +4,7 @@
 (function () {
   'use strict';
   var d = document, w = window, root = d.documentElement;
-  var qa = /[?&]qa=1/.test(location.search);
+  var qa = /[?&](qa|edit)=1/.test(location.search); // edit=1 — страница открыта в конструкторе: всё сразу в конечном виде
   if (qa) root.classList.add('qa');
   var $ = function (s, c) { return (c || d).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || d).querySelectorAll(s)); };

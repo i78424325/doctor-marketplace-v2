@@ -907,3 +907,7 @@ textarea.inp{min-height:112px;resize:vertical;padding-right:56px}
 .qa .marquee-in{animation:none!important}
 .qa [data-reveal]{opacity:1!important;transform:none!important}
 .qa .tagline .w{opacity:1!important}
+/* оформление блоков из конструктора: свои отступы (отдельно для компьютера и телефона), фон, показ только на компьютере или только на телефоне */
+.blk-bg{background:var(--bgc)!important}
+@media (min-width:768px){.blk-pt{padding-top:var(--pt)!important}.blk-pb{padding-bottom:var(--pb)!important}.blk-hd{display:none!important}}
+@media (max-width:767px){.blk-ptm{padding-top:var(--ptm)!important}.blk-pbm{padding-bottom:var(--pbm)!important}.blk-hm{display:none!important}}

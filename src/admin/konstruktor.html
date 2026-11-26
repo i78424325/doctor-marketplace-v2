@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Конструктор — Доктор Маркетплейс</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="konstruktor.css?v={{ver}}">
+</head>
+<body>
+<header class="kbar">
+  <a class="kbrand" href="{{base}}" target="_blank" rel="noopener" title="Открыть сайт в новой вкладке"><img src="../favicon.svg" alt="" width="28" height="28"><span>Конструктор</span></a>
+  <span class="kpage" id="k-page">Главная</span>
+  <div class="kdev" role="group" aria-label="Как показать страницу">
+    <button type="button" data-dev="desktop" aria-pressed="true" title="Компьютер"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>Компьютер</span></button>
+    <button type="button" data-dev="tablet" aria-pressed="false" title="Планшет"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M11 18h2"/></svg><span>Планшет</span></button>
+    <button type="button" data-dev="phone" aria-pressed="false" title="Телефон"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></svg><span>Телефон</span></button>
+  </div>
+  <div class="kgrow"></div>
+  <button type="button" class="kbtn kicon" id="k-undo" title="Отменить (Ctrl+Z)" aria-label="Отменить" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button type="button" class="kbtn kicon" id="k-redo" title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+  <span class="kstatus" id="k-status" aria-live="polite">Загружаю…</span>
+  <a class="kbtn kghost klogin" id="k-login" href="./" target="_blank" rel="noopener" hidden>Войти</a>
+  <a class="kbtn kghost" href="./" target="_blank" rel="noopener" title="Услуги, новости, документы, контакты — старая админка">Разделы</a>
+  <a class="kbtn kghost" href="zhurnal.html" target="_blank" rel="noopener" title="Кто и когда менял сайт, откат">Журнал</a>
+  <button type="button" class="kbtn kprimary" id="k-pub" disabled>Опубликовать</button>
+</header>
+<main class="kmain">
+  <div class="kcanvas"><div class="kstage" id="k-stage" data-dev="desktop"><iframe id="k-frame" title="Страница сайта для правки"></iframe></div></div>
+  <aside class="kpanel" id="k-panel" aria-label="Настройки"><p class="pnote" style="padding:24px">Загружаю страницу…</p></aside>
+</main>
+<div class="kmodal" id="k-modal" hidden></div>
+<div class="ktoast" id="k-toast" role="status" aria-live="polite" hidden></div>
+<script src="journal.js?v={{ver}}"></script>
+<script src="konstruktor.js?v={{ver}}"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+/* Конструктор: что видно на самой странице во фрейме — рамки блоков, подсветка полей, кнопки блока и пункта.
+   Подключается только в версии для редактора (admin/edit/?edit=1), на сайте этих стилей нет. */
+html.dm-edit #dock,html.dm-edit #chat,html.dm-edit .sticky-cta,html.dm-edit .dock-tip{display:none!important}
+html.dm-edit body{padding-bottom:0!important}
+
+/* блоки: наведение — пунктир, выбранный — сплошная рамка */
+html.dm-edit [data-blk].dm-hover{outline:2px dashed rgba(78,182,121,.8);outline-offset:-2px}
+html.dm-edit [data-blk].dm-sel{outline:2px solid #4EB679;outline-offset:-2px}
+html.dm-edit [data-item].dm-ihover{outline:1.5px dashed rgba(15,59,42,.4);outline-offset:4px;border-radius:8px}
+
+/* скрытые блоки и блоки «только на компьютере / только на телефоне» видны полупрозрачными */
+html.dm-edit .blk-off{opacity:.38}
+@media (max-width:767px){html.dm-edit .blk-hm{display:block!important;opacity:.38}}
+@media (min-width:768px){html.dm-edit .blk-hd{display:block!important;opacity:.38}}
+
+/* поля: нажал — пишешь */
+html.dm-edit [contenteditable]{cursor:text;border-radius:6px;transition:box-shadow .2s cubic-bezier(.22,1,.36,1),background-color .2s cubic-bezier(.22,1,.36,1)}
+html.dm-edit [contenteditable]:hover{box-shadow:0 0 0 2px rgba(78,182,121,.5)}
+html.dm-edit [contenteditable]:focus{outline:none;box-shadow:0 0 0 2px #4EB679;background-color:rgba(78,182,121,.08)}
+html.dm-edit [contenteditable]:empty::before{content:attr(data-ph);opacity:.45}
+html.dm-edit [data-img]{cursor:pointer}
+html.dm-edit [data-img]:hover{outline:3px solid #4EB679;outline-offset:3px}
+
+/* бегущая строка стоит на месте, дубль строки не мешает */
+html.dm-edit .marquee-in{animation:none!important}
+html.dm-edit .marquee ul[aria-hidden]{display:none}
+
+/* кнопки блока и пункта */
+#dm-bt,#dm-it{position:fixed;z-index:2147483600;display:none;align-items:center;gap:2px;padding:4px;border-radius:12px;background:#0F3B2A;color:#FFFFFF;box-shadow:0 10px 28px -10px rgba(0,0,0,.55);font:600 12px/16px system-ui,-apple-system,"Segoe UI",sans-serif}
+#dm-bt .dm-name{padding:0 8px 0 6px;white-space:nowrap;opacity:.92}
+#dm-bt.is-off .dm-name::after{content:" · скрыт";color:#E4C27D}
+#dm-bt button,#dm-it button{all:unset;display:grid;place-items:center;width:30px;height:30px;border-radius:8px;color:#FFFFFF;cursor:pointer;transition:background-color .2s cubic-bezier(.22,1,.36,1)}
+#dm-it{padding:3px;border-radius:10px;background:#164A35}
+#dm-it button{width:26px;height:26px;border-radius:7px}
+#dm-bt button:hover,#dm-it button:hover{background:rgba(255,255,255,.16)}
+#dm-bt button:focus-visible,#dm-it button:focus-visible{outline:2px solid #4EB679}
+#dm-bt [data-act="del"]:hover,#dm-it [data-act="idel"]:hover{background:#C93B3B}
+#dm-add{all:unset;position:fixed;z-index:2147483500;display:none;align-items:center;gap:6px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:#4EB679;color:#0B1A12;font:700 13px/16px system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 10px 24px -10px rgba(0,0,0,.45);cursor:pointer;transition:background-color .2s cubic-bezier(.22,1,.36,1)}
+#dm-add:hover{background:#45A96E}
+#dm-add:focus-visible{outline:2px solid #0F3B2A;outline-offset:2px}
+#dm-tip{position:fixed;z-index:2147483600;display:none;max-width:min(560px,calc(100vw - 16px));padding:6px 10px;border-radius:8px;background:#121C16;color:#FFFFFF;font:500 12px/16px system-ui,-apple-system,"Segoe UI",sans-serif;pointer-events:none}
