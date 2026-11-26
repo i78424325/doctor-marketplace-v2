@@ -221,8 +221,8 @@ singletons:
 collections:
   - name: news
     label: 'Новости и статьи'
-    label_singular: 'новость'
-    description: 'Нажмите «Создать», чтобы добавить новость или статью'
+    label_singular: 'новость или статью'
+    description: 'Нажмите «Создать», чтобы добавить новость или статью. Статьи для поиска — о продвижении, рекламе и маркетплейсах: выберите «Статья», рубрику и заполните поля для поиска внизу.'
     icon: newspaper
     folder: content/news
     format: json
@@ -230,16 +230,20 @@ collections:
     create: true
     delete: true
     slug: '{{year}}-{{month}}-{{day}}-{{slug}}'
-    summary: '{{date}} · {{title}}'
+    summary: '{{date}} · {{kind}} · {{title}}'
     sortable_fields: [date, title]
     fields:
+      - { name: kind, label: 'Что это', widget: select, options: ['Новость', 'Статья'], default: 'Новость', hint: 'Новость — о компании и событиях. Статья — полезный материал для поиска: о продвижении, рекламе, маркетплейсах' }
+      - { name: topic, label: 'Рубрика', widget: select, required: false, options: ['Продвижение', 'Реклама', 'Маркетплейсы', 'Аналитика', 'Карточки товаров', 'Новости компании'], hint: 'Видна на сайте рядом с датой, по ней работает фильтр на странице новостей' }
       - { name: title, label: 'Заголовок', widget: string }
       - { name: date, label: 'Дата', widget: datetime, format: 'YYYY-MM-DD', date_format: 'DD.MM.YYYY', time_format: false }
-      - { name: excerpt, label: 'Коротко — для карточки новости', widget: text }
+      - { name: excerpt, label: 'Коротко — для карточки и списка', widget: text, hint: 'Одно-два предложения: о чём материал' }
       - { name: cover, label: 'Обложка', widget: image, required: false }
       - { name: body, label: 'Текст', widget: richtext }
       - { name: video, label: 'Видео (необязательно)', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
       - { name: url, label: 'Адрес латиницей (необязательно)', widget: string, required: false, hint: 'Пусто — адрес сделается из заголовка' }
+      - { name: seo_title, label: 'Заголовок для поиска (необязательно)', widget: string, required: false, hint: 'Как статья выглядит в Яндексе и Google: до 60 знаков, с главным запросом. Пусто — обычный заголовок' }
+      - { name: seo_description, label: 'Описание для поиска (необязательно)', widget: text, required: false, hint: 'Текст под заголовком в поиске: до 160 знаков. Пусто — текст из «Коротко»' }
       - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
 
   - name: docs

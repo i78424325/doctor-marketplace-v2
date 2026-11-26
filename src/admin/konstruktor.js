@@ -87,7 +87,7 @@
     stats: 'Цифры правятся на месте. Добавить или убрать цифру — в «Разделах»: «Цифры».',
     tagline: '*Слова в звёздочках* выделяются цветом.',
     founder: 'Фото — нажмите на него. Пункты списка: наведите — появятся кнопки. Основатель один на весь сайт: правка видна и на странице «О компании».',
-    news: 'Новости добавляются в «Разделах»: «Новости и статьи». Здесь — заголовок блока.',
+    news: 'Список последних новостей и статей. Сколько показывать — выше, от 3 до 6. Новую новость или статью добавляют в «Разделах»: «Новости и статьи».',
     steps: 'Шаги правятся на месте. Добавить шаг — в «Разделах»: «Шаги „Как мы работаем“».',
     faq: 'Вопросы и ответы — в «Разделах»: «Вопросы и ответы». Здесь — заголовок блока.',
     cta: 'Кнопка открывает окно записи на консультацию.'
@@ -741,13 +741,41 @@
       '<section class="pg"><h3>Фон</h3><div class="sw">' + bgButtons(st) + '</div></section>' +
       '<section class="pg"><h3>Показывать на сайте</h3><div class="seg">' +
       [['', 'Везде'], ['desktop', 'Компьютер'], ['mobile', 'Телефон']].map(o => '<button type="button" data-show="' + o[0] + '" class="' + ((st.show || '') === o[0] ? 'on' : '') + '" aria-pressed="' + ((st.show || '') === o[0]) + '">' + o[1] + '</button>').join('') +
-      '</div></section>' +
+      '</div></section>' + optionsHtml(m) +
       '<section class="pg"><h3>Блок</h3><div class="pa">' +
       '<button type="button" data-p="up">' + svg('up', 16) + 'Выше</button><button type="button" data-p="down">' + svg('down', 16) + 'Ниже</button>' +
       '<button type="button" data-p="copy">' + svg('copy', 16) + 'Копия</button><button type="button" data-p="hide">' + svg(m.hidden ? 'eye' : 'eyeOff', 16) + (m.hidden ? 'Показать' : 'Скрыть') + '</button>' +
       '<button type="button" data-p="del" class="danger">' + svg('trash', 16) + 'Удалить</button></div>' +
       '<button type="button" class="kbtn kprimary wide" data-p="lib">' + svg('plus', 16) + 'Добавить блок ниже</button></section>' +
       '<section class="pg"><h3>Подсказка</h3><p class="pnote">' + esc(HELP[m.type] || HELP._) + '</p></section>';
+  }
+  /* свои настройки блока (например, сколько новостей показывать) — из build.py, BLOCK_OPTIONS */
+  const optionsOf = m => ((S.data.types[m.type] || {}).options || []);
+  const optValue = (m, o) => (m.data && m.data[o.key] != null && m.data[o.key] !== '' ? m.data[o.key] : o.default);
+  function optionsHtml(m) {
+    return optionsOf(m).map(o => '<section class="pg"><h3>' + esc(o.label) + '</h3><div class="seg" style="grid-template-columns:repeat(' + o.values.length + ',minmax(0,1fr))">' +
+      o.values.map(v => {
+        const on = String(optValue(m, o)) === String(v);
+        return '<button type="button" data-opt="' + esc(o.key) + '" data-val="' + esc(v) + '" class="' + (on ? 'on' : '') + '" aria-pressed="' + on + '">' + esc(v) + '</button>';
+      }).join('') + '</div></section>').join('');
+  }
+  function applyOptions(el, m) {
+    optionsOf(m).forEach(o => {
+      const v = optValue(m, o);
+      if (o.cap) $$('[data-cap]', el).forEach(x => { x.hidden = +x.getAttribute('data-cap') >= +v; });
+    });
+  }
+  function setOption(key, val) {
+    const el = S.sel, m = el && model(el.getAttribute('data-blk'));
+    const o = m && optionsOf(m).find(x => x.key === key);
+    if (!o) return;
+    if (!m.data || typeof m.data !== 'object') m.data = {};
+    m.data[key] = typeof o.default === 'number' ? +val : val;
+    applyOptions(el, m);
+    touch('page', 'оформление');
+    pushUndo();
+    renderPanel();
+    schedule();
   }
   function pad(k, label, st) {
     const has = /^\d{1,3}$/.test(String(st[k] == null ? '' : st[k]));
@@ -810,6 +838,7 @@
       if (b.dataset.reset) { setStyle(b.dataset.reset, '', true); return; }
       if (b.hasAttribute('data-bg')) { setStyle('bg', b.getAttribute('data-bg'), true); return; }
       if (b.hasAttribute('data-show')) { setStyle('show', b.getAttribute('data-show'), true); return; }
+      if (b.hasAttribute('data-opt')) { setOption(b.getAttribute('data-opt'), b.getAttribute('data-val')); return; }
       if (b.dataset.addType) { addBlock(b.dataset.addType); return; }
       if (b.dataset.goto) {
         const el = S.fd && $('[data-blk="' + CSS.escape(b.dataset.goto) + '"]', S.fd);

@@ -9,7 +9,8 @@ import hashlib, html, json, os, pathlib, re, shutil, sys, time, unicodedata, url
 P = pathlib.Path(__file__).resolve().parent
 SRC, OUT, C = P / 'src', P / 'site', P / 'content'
 BASE = os.environ.get('SITE_BASE', '/doctor-marketplace-v2/')
-SITE = os.environ.get('SITE_URL', 'https://i78424325.github.io').rstrip('/') + BASE
+ORIGIN = os.environ.get('SITE_URL', 'https://i78424325.github.io').rstrip('/')
+SITE = ORIGIN + BASE
 VER = time.strftime('%m%d%H%M')
 INDEX = os.environ.get('SITE_INDEX') == '1'  # 1 — открыть сайт поисковикам (когда переедет на свой домен)
 REV = os.environ.get('GITHUB_SHA') or 'local'  # какая версия репозитория собрана — конструктор сверяет её с последней правкой
@@ -127,7 +128,10 @@ DOCS = uniq(sorted(({'slug': slugify(d.get('url') or d['_file']), 'title': d.get
 # старые новости сохраняют адрес, у новой с тем же заголовком будет -2: ссылки, которыми уже поделились, не меняются
 NEWS = list(reversed(uniq(sorted(({'slug': slugify(d.get('url') or re.sub(r'^\d{4}-\d{2}-\d{2}-?', '', d['_file']) or d.get('title')),
                                    'title': d.get('title') or 'Новость', 'date': str(d.get('date') or '')[:10], 'excerpt': d.get('excerpt') or '',
-                                   'cover': d.get('cover') or '', 'video': d.get('video') or '', 'body': d.get('body') or ''} for d in entries('news')),
+                                   'cover': d.get('cover') or '', 'video': d.get('video') or '', 'body': d.get('body') or '',
+                                   'kind': 'Статья' if d.get('kind') == 'Статья' else 'Новость', 'topic': str(d.get('topic') or '').strip(),
+                                   'seo_title': str(d.get('seo_title') or '').strip(), 'seo_description': str(d.get('seo_description') or '').strip()}
+                                  for d in entries('news')),
                                  key=lambda n: (n['date'], n['slug'])), what='Новость')))
 RESERVED = {'uslugi', 'sait', 'o-nas', 'voprosy', 'kontakty', 'novosti', 'dokumenty', 'brief', 'admin', 'img', 'js', 'fonts'}
 # у копии страницы (A/B) адрес остаётся за оригиналом: первым идёт файл, чьё имя совпадает с адресом
@@ -438,6 +442,10 @@ def founder_html(cta, ed=False):
                ea(ed, 'chip', fb='Кто ведёт ваш магазин'), esc(F.get('chip') or 'Кто ведёт ваш магазин'), ea(ed, 'name'), esc(F.get('name', '')), ea(ed, 'role'), esc(F.get('role', '')),
                el(ed, 'items'), ''.join('<li%s>{{icon:seal-check}}<span%s>%s</span></li>' % (ei(ed), ea(ed, '.'), esc(t)) for t in F.get('items') or []), cta))
 
+def news_tag(n):
+    """Метка материала: «Новость» или «Статья» и рубрика — «Статья · Реклама»."""
+    return ' · '.join(x for x in (n['kind'], n['topic']) if x)
+
 def news_cards(items):
     if not items:
         return '<div class="empty">{{icon:newspaper}}<p>Скоро здесь появятся новости и статьи.</p></div>'
@@ -445,9 +453,36 @@ def news_cards(items):
     for n in items:
         cover = ('<span class="nc-img"><img src="%s" alt="" loading="lazy" decoding="async"></span>' % esc(media(n['cover']))) if n['cover'] else \
                 '<span class="nc-img nc-ph">%s</span>' % ('{{icon:play}}' if n['video'] else '{{icon:newspaper}}')
-        out.append('<a class="news-card" href="{{base}}novosti/%s/" data-reveal>%s<span class="nc-body"><time datetime="%s">%s</time><b>%s</b><span>%s</span></span></a>'
-                   % (n['slug'], cover, esc(n['date']), ru_date(n['date']), esc(n['title']), esc(n['excerpt'])))
+        out.append('<a class="news-card" href="{{base}}novosti/%s/" data-reveal data-kind="%s" data-topic="%s">%s<span class="nc-body">'
+                   '<span class="nc-meta"><time datetime="%s">%s</time><span class="nc-tag">%s</span></span><b>%s</b><span>%s</span></span></a>'
+                   % (n['slug'], esc(n['kind']), esc(n['topic']), cover, esc(n['date']), ru_date(n['date']), esc(news_tag(n)), esc(n['title']), esc(n['excerpt'])))
     return '<div class="news-grid%s">' % (' news-one' if len(out) == 1 else '') + ''.join(out) + '</div>'
+
+NEWS_MAX = 6  # на главной — от 3 до 6 последних материалов списком заголовков
+def news_count(d):
+    try:
+        return max(3, min(NEWS_MAX, int(d.get('count') or NEWS_MAX)))
+    except (TypeError, ValueError):
+        return NEWS_MAX
+
+def news_list_html(items, ed=False, count=NEWS_MAX):
+    """Список заголовков: дата, «Новость/Статья · рубрика», заголовок. В конструкторе — все шесть, лишние спрятаны (data-cap)."""
+    if not items:
+        return '<div class="empty">{{icon:newspaper}}<p>Скоро здесь появятся новости и статьи.</p></div>'
+    rows = ''.join('<li%s%s><a class="nl-item" href="{{base}}novosti/%s/"><span class="nl-meta"><time datetime="%s">%s</time><span class="nl-tag">%s</span></span>'
+                   '<b class="nl-title">%s</b>{{icon:arrow-right}}</a></li>'
+                   % (' data-cap="%d"' % k if ed else '', ' hidden' if k >= count else '', n['slug'], esc(n['date']), ru_date(n['date']), esc(news_tag(n)), esc(n['title']))
+                   for k, n in enumerate(items))
+    return '<ol class="nlist" data-reveal>%s</ol>' % rows
+
+def news_filters(items):
+    """Кнопки «Все / Новости / Статьи / рубрики» над карточками — только если есть из чего выбирать."""
+    kinds = [k for k in ('Новость', 'Статья') if any(n['kind'] == k for n in items)]
+    topics = sorted({n['topic'] for n in items if n['topic']})
+    chips = ['<button type="button" class="nf%s" data-nf="%s" aria-pressed="%s">%s</button>' % (' on' if not f else '', esc(f), 'true' if not f else 'false', esc(label))
+             for f, label in ([('', 'Все')] + ([('kind:Новость', 'Новости'), ('kind:Статья', 'Статьи')] if len(kinds) > 1 else [])
+                              + ([('topic:' + t, t) for t in topics] if len(topics) > 1 else []))]
+    return '<div class="nfilter" role="group" aria-label="Что показать">%s</div>' % ''.join(chips) if len(chips) > 1 else ''
 
 def hero_title(raw):
     t = esc(raw or '')
@@ -633,8 +668,10 @@ def blk_founder(b, d, ed):
     return '<section class="sec%s" aria-label="Основатель компании"><div class="wrap">%s</div></section>' % (' sec-tight' if d.get('tight') else '', founder_html(cta, ed))
 
 def blk_news(b, d, ed):
+    n = news_count(d)
     return ('<section class="sec sec-alt" aria-labelledby="%s"><div class="wrap">%s<div style="margin-top:40px">%s</div></div></section>'
-            % (hid(b, 'news-h'), head_html(b, d, ed, 'news-h', link=('{{base}}novosti/', 'Все новости')), news_cards(NEWS[:3])))
+            % (hid(b, 'news-h'), head_html(b, d, ed, 'news-h', link=('{{base}}novosti/', 'Все новости и статьи')),
+               news_list_html(NEWS[:NEWS_MAX] if ed else NEWS[:n], ed, n)))
 
 def blk_steps(b, d, ed):
     """list: items — «Как мы работаем», site — «Как начать» (шаги заказа сайта)."""
@@ -730,7 +767,7 @@ def blk_cases(b, d, ed):
     return ''
 
 def blk_news_list(b, d, ed):
-    return '<section class="sec sec-tight" aria-label="Все новости"><div class="wrap">%s</div></section>' % news_cards(NEWS)
+    return '<section class="sec sec-tight" aria-label="Все новости и статьи"><div class="wrap">%s%s</div></section>' % (news_filters(NEWS), news_cards(NEWS))
 
 FAQ_ASIDE = ('Не нашли свой вопрос?', 'Задайте его на бесплатной консультации: разберём ваш магазин и подскажем, с чего начать.', 'Задать вопрос')
 def blk_faq_page(b, d, ed):
@@ -791,7 +828,7 @@ BLOCKS = {  # тип → (название в конструкторе, что �
     'founder': ('Основатель', 'Фото, имя и достижения', blk_founder),
     'portfolio': ('Наши сайты', 'Работающий магазин и демо-сайты', blk_portfolio),
     'cases': ('Кейсы услуги', 'Кейсы «Сайта для селлера» из «Разделов»', blk_cases),
-    'news': ('Новости', 'Три последние новости', blk_news),
+    'news': ('Новости и статьи', 'Список заголовков последних материалов, от 3 до 6', blk_news),
     'news-list': ('Все новости', 'Карточки всех новостей', blk_news_list),
     'steps': ('Как мы работаем', 'Шаги работы по порядку', blk_steps),
     'faq': ('Вопросы и ответы', 'Частые вопросы, раскрываются по нажатию', blk_faq),
@@ -812,6 +849,10 @@ BLOCK_DEFAULTS = {  # с чем появляется новый блок из с
     'news': {'chip': 'Новости', 'title': 'Новости и статьи'},
     'cases': {'service': 'sait'},
     'contact': {'items': (TX.get('kontakty') or {}).get('meeting') or ['Онлайн-встреча в удобное для вас время']},
+}
+
+BLOCK_OPTIONS = {  # настройки блока в панели конструктора; cap — сколько пунктов показывать (лишние в конструкторе прячутся сразу)
+    'news': [{'key': 'count', 'label': 'Сколько материалов показывать', 'values': [3, 4, 5, 6], 'default': NEWS_MAX, 'cap': True}],
 }
 
 # страницы сайта, которые собираются из блоков: ключ (имя файла content/site/<ключ>.json), адрес, подпись в «хлебных крошках», название в конструкторе
@@ -963,7 +1004,7 @@ def widgets_html():
         out = out.replace(k, v)
     return out
 
-def page(key, title, desc, body, sticky=True, scripts=('site',), head='', noindex=False):
+def page(key, title, desc, body, sticky=True, scripts=('site',), head='', noindex=False, og_type='website', og_image=None):
     def a(k, url, label, li=False):
         x = '<a href="{{base}}%s"%s>%s</a>' % (url, ' aria-current="page"' if k == key else '', label)
         return '<li>%s</li>' % x if li else x
@@ -975,6 +1016,7 @@ def page(key, title, desc, body, sticky=True, scripts=('site',), head='', noinde
                  ('{{footer_text}}', esc(S.get('footer_text', ''))), ('{{widgets}}', widgets_html()),
                  ('{{robots}}', 'index, follow' if INDEX and not noindex else 'noindex, nofollow'),
                  ('{{title}}', esc(title)), ('{{desc}}', esc(desc)), ('{{head}}', head),
+                 ('{{og_type}}', og_type), ('{{og_image}}', esc(og_image or SITE + 'img/og.png')),
                  ('{{scripts}}', ''.join('<script src="{{base}}js/%s.js?v={{ver}}" defer></script>' % s for s in scripts)),
                  ('{{sticky}}', STICKY if sticky else '')):
         out = out.replace(k, v)
@@ -1065,12 +1107,30 @@ def news_post(n):
     else:
         top = ''
     more = [x for x in NEWS if x['slug'] != n['slug']][:3]
-    return ('<section class="phero"><div class="wrap narrow">%s<time class="chip" datetime="%s">%s</time><h1 class="heading-2 grad">%s</h1>%s</div></section>'
+    return ('<section class="phero"><div class="wrap narrow">%s<div class="np-meta"><time class="chip" datetime="%s">%s</time><span class="chip chip-accent">%s</span></div>'
+            '<h1 class="heading-2 grad">%s</h1>%s</div></section>'
             '<section class="sec sec-tight"><div class="wrap narrow">%s<article class="prose">%s</article>'
-            '<a class="link-arrow link-acc" href="{{base}}novosti/" style="margin-top:40px"><span class="flip">{{icon:arrow-right}}</span><span>Все новости</span></a></div></section>'
-            % (crumbs(('Новости', '{{base}}novosti/'), (n['title'], None)), esc(n['date']), ru_date(n['date']), esc(n['title']),
+            '<a class="link-arrow link-acc" href="{{base}}novosti/" style="margin-top:40px"><span class="flip">{{icon:arrow-right}}</span><span>Все новости и статьи</span></a></div></section>'
+            % (crumbs(('Новости', '{{base}}novosti/'), (n['title'], None)), esc(n['date']), ru_date(n['date']), esc(news_tag(n)), esc(n['title']),
                '<p class="lead">%s</p>' % esc(n['excerpt']) if n['excerpt'] else '', top, md(n['body'])) +
             ('<section class="sec" style="padding-top:0"><div class="wrap"><h2 class="heading-5">Читайте также</h2><div style="margin-top:24px">%s</div></div></section>' % news_cards(more) if more else '') + cta_band())
+
+def abs_url(u):
+    """Путь на сайте → полный адрес (для соцсетей и поисковиков)."""
+    return u if re.match(r'^https?://', u or '', re.I) else ORIGIN + (u or '')
+
+def article_ld(n):
+    """Разметка статьи для Яндекса и Google: заголовок, дата, рубрика, обложка, издатель."""
+    ld = {'@context': 'https://schema.org', '@type': 'NewsArticle' if n['kind'] == 'Новость' else 'Article',
+          'headline': (n['seo_title'] or n['title'])[:110], 'description': n['seo_description'] or n['excerpt'] or n['title'],
+          'datePublished': n['date'], 'dateModified': n['date'], 'mainEntityOfPage': SITE + 'novosti/%s/' % n['slug'],
+          'author': {'@type': 'Organization', 'name': COMPANY},
+          'publisher': {'@type': 'Organization', 'name': COMPANY, 'logo': {'@type': 'ImageObject', 'url': SITE + 'img/og.png'}}}
+    if n['cover']:
+        ld['image'] = [abs_url(media(n['cover']))]
+    if n['topic']:
+        ld['articleSection'] = n['topic']
+    return '<script type="application/ld+json">%s</script>' % json.dumps(ld, ensure_ascii=False).replace('</', '<\\/').replace('{{', '{\\u007b')
 
 def doc_page(d):
     nav = ''.join('<li><a href="{{base}}dokumenty/%s/"%s>%s</a></li>' % (o['slug'], ' aria-current="page"' if o['slug'] == d['slug'] else '', esc(o['title'])) for o in DOCS)
@@ -1086,7 +1146,8 @@ DOCS_LIST = ('<section class="phero">{{phero-bg}}<div class="wrap">%s<h1 class="
 PAGES_OUT = [(url, site_page(key)) for key, url, _, _ in PAGE_KEYS] + [
     ('dokumenty/', page('dokumenty', 'Документы — %s' % COMPANY, 'Оферта, политика обработки персональных данных и согласия.', fill(DOCS_LIST), sticky=False)),
 ] + [('uslugi/%s/' % s['slug'], page('uslugi', '%s — %s' % (s['title'], COMPANY), s.get('short', ''), fill(service_body(s)))) for s in SERVICES if s['slug'] != 'sait'] \
-  + [('novosti/%s/' % n['slug'], page('novosti', '%s — %s' % (n['title'], COMPANY), n['excerpt'] or n['title'], fill(news_post(n)))) for n in NEWS] \
+  + [('novosti/%s/' % n['slug'], page('novosti', '%s — %s' % (n['seo_title'] or n['title'], COMPANY), n['seo_description'] or n['excerpt'] or n['title'],
+                                       fill(news_post(n)), head=article_ld(n), og_type='article', og_image=abs_url(media(n['cover'])) if n['cover'] else None)) for n in NEWS] \
   + [('dokumenty/%s/' % d['slug'], page('dokumenty', '%s — %s' % (d['title'], COMPANY), d['title'], fill(doc_page(d)), sticky=False)) for d in DOCS] \
   + [('%s/' % p['slug'], page(p['slug'], '%s — %s' % (p.get('title') or p['slug'], COMPANY), p.get('description', ''), fill(''.join(block_html(b) for b in p.get('blocks') or []))))
      for p in PAGES]
@@ -1128,7 +1189,7 @@ EDIT_COMMON = {
     'pages': [{'key': k, 'title': t, 'url': BASE + u} for k, u, _, t in PAGE_KEYS],
     'sources': {n: {'file': 'content/%s.json' % n, 'doc': (F if n == 'founder' else jload('%s.json' % n)) or {}, 'sha': blob_sha('%s.json' % n)}
                 for n in ('stats', 'founder', 'services', 'clients', 'steps', 'video')},
-    'types': {t: {'name': v[0], 'about': v[1]} for t, v in BLOCKS.items()},
+    'types': {t: {'name': v[0], 'about': v[1], 'options': BLOCK_OPTIONS.get(t, [])} for t, v in BLOCKS.items()},
     'defaults': BLOCK_DEFAULTS, 'library': LIB, 'bg': BG,
 }
 for _k, _u, _c, _t in PAGE_KEYS:  # admin/edit/<ключ>/ — страница для правки и её данные
@@ -1142,7 +1203,10 @@ brief = tokens((SRC / 'brief' / 'index.html').read_text(encoding='utf-8')).repla
 (OUT / 'brief').mkdir()
 (OUT / 'brief' / 'index.html').write_text(brief, encoding='utf-8')
 (OUT / 'favicon.svg').write_text(MARK.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ', 1).replace(' aria-hidden="true" focusable="false"', ''), encoding='utf-8')
-(OUT / 'robots.txt').write_text('User-agent: *\n%s\n' % ('Allow: /' if INDEX else 'Disallow: /'), encoding='utf-8')
+_lastmod = {'novosti/%s/' % n['slug']: n['date'] for n in NEWS if re.fullmatch(r'\d{4}-\d{2}-\d{2}', n['date'])}
+(OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n%s\n</urlset>\n' % '\n'.join(
+    '<url><loc>%s</loc>%s</url>' % (esc(SITE + p), '<lastmod>%s</lastmod>' % _lastmod[p] if p in _lastmod else '') for p, _ in PAGES_OUT), encoding='utf-8')
+(OUT / 'robots.txt').write_text('User-agent: *\n%s\n' % ('Allow: /\nSitemap: %ssitemap.xml' % SITE if INDEX else 'Disallow: /'), encoding='utf-8')
 (OUT / '.nojekyll').write_text('', encoding='utf-8')
 sizes = sorted(((p.stat().st_size, str(p.relative_to(OUT))) for p in OUT.rglob('index.html')), reverse=True)
 print('built', VER, '→', OUT, '| страниц:', len(PAGES_OUT) + 2, '| новостей:', len(NEWS), '| документов:', len(DOCS), '| своих страниц:', len(PAGES),
