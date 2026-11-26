@@ -572,7 +572,7 @@ button.vcard:hover{transform:translateY(-4px)}
 .case-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
 @media (min-width:640px){.case-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1000px){.case-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.case-card{display:flex;flex-direction:column;border-radius:var(--r5);background:var(--s1);box-shadow:inset 0 0 0 1px var(--line),var(--sh-sm);overflow:hidden;transition:transform .35s var(--ease),box-shadow .35s var(--ease)}
+.case-card{position:relative;display:flex;flex-direction:column;border-radius:var(--r5);background:var(--s1);box-shadow:inset 0 0 0 1px var(--line),var(--sh-sm);overflow:hidden;transition:transform .35s var(--ease),box-shadow .35s var(--ease)}
 .case-card:hover{transform:translateY(-4px);box-shadow:inset 0 0 0 1px var(--a24),var(--sh-md)}
 .case-card:active{transform:translateY(-1px)}
 .cc-viz{display:block;aspect-ratio:16/10;background:var(--s2);box-shadow:inset 0 -1px 0 var(--line)}
@@ -591,6 +591,13 @@ button.vcard:hover{transform:translateY(-4px)}
 .cc-res strong{font-size:30px;line-height:36px;font-weight:800;letter-spacing:-.03em;color:var(--deep)}
 .cc-res span{font-size:14px;line-height:20px;color:var(--muted)}
 .cc-ex{font-size:14px;line-height:20px;color:var(--muted)}
+/* демо-кейсы: пометка на карточке, на странице кейса и над списком */
+.cc-demo{position:absolute;z-index:1;top:12px;left:12px;padding:4px 10px;border-radius:var(--rf);background:var(--s1);box-shadow:inset 0 0 0 1px var(--gold16),var(--sh-sm);font-size:12px;line-height:16px;font-weight:700;color:var(--gold-ink)}
+.chip-demo{color:var(--gold-ink);background:var(--gold08);box-shadow:inset 0 0 0 1px var(--gold16)}
+.demo-case{display:flex;align-items:flex-start;gap:12px;margin:0 0 16px;padding:14px 18px;border-radius:var(--r4);background:var(--gold08);box-shadow:inset 0 0 0 1px var(--gold16);font-size:14px;line-height:20px;color:var(--text)}
+.demo-case>.i{flex:none;margin-top:1px;font-size:20px;color:var(--gold-ink)}
+.demo-case b{font-weight:700}
+.case-page>.demo-case{margin:0}
 
 /* график продаж: линии рисуются, когда график появляется на экране */
 .cchart{display:block;width:100%;height:auto;overflow:visible}

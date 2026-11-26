@@ -292,6 +292,7 @@ collections:
           - { name: caption, label: 'Подпись', widget: string, required: false }
       - { name: video, label: 'Видео (необязательно)', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
       - { name: url, label: 'Адрес латиницей (необязательно)', widget: string, required: false, hint: 'Пусто — адрес сделается из заголовка' }
+      - { name: demo, label: 'Демо-кейс (пример)', widget: boolean, required: false, default: false, hint: 'На сайте у кейса будет пометка «Демо-кейс». Когда появятся настоящие кейсы, демо-кейсы можно удалить' }
       - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
 
   - name: news

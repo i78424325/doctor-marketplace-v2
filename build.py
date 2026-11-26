@@ -171,7 +171,8 @@ CASES = list(reversed(uniq(sorted(({
                 if isinstance(r, dict) and r.get('value') is not None and str(r['value']).strip()],
     'metrics': [m for m in d.get('metrics') or [] if isinstance(m, dict) and m.get('label')],
     'chart': d.get('chart') if isinstance(d.get('chart'), dict) else {},
-    'shots': [x for x in d.get('screenshots') or [] if isinstance(x, dict) and x.get('image')]}
+    'shots': [x for x in d.get('screenshots') or [] if isinstance(x, dict) and x.get('image')],
+    'demo': d.get('demo') is True or str(d.get('demo')).strip().lower() in ('true', '1', 'да')}
     for d in entries('cases')), key=lambda c: (c['date'], c['slug'])), what='Кейс')))
 RESERVED = {'uslugi', 'sait', 'keysy', 'o-nas', 'voprosy', 'kontakty', 'novosti', 'dokumenty', 'brief', 'admin', 'img', 'js', 'fonts'}
 # у копии страницы (A/B) адрес остаётся за оригиналом: первым идёт файл, чьё имя совпадает с адресом
@@ -660,6 +661,16 @@ def growth(before, after, label=''):
     p = (r - 1) * 100
     return ('+' if p >= 0 else '−') + '%.0f%%' % abs(p)
 
+DEMO_NOTE = '<div class="demo-case" role="note">{{icon:warning-circle}}<p><b>%s</b> %s</p></div>'
+def demo_note(items):
+    """Над списком кейсов: все демо — «пока здесь демо-кейсы»; часть — какие из них примеры."""
+    demo = [c for c in items if c['demo']]
+    if not demo:
+        return ''
+    if len(demo) == len(items):
+        return DEMO_NOTE % ('Пока здесь демо-кейсы.', 'Магазины и цифры условные — так будут выглядеть настоящие кейсы.')
+    return DEMO_NOTE % ('Кейсы с пометкой «Демо-кейс» — примеры.', 'Магазины и цифры в них условные.')
+
 def case_card(c, k=0, ed=False, hide=False):
     """Карточка кейса: мини-график (нет графика — обложка), площадки, ниша, заголовок и главная цифра."""
     viz = chart_svg(c, 'm-' + c['slug'], 'mini')
@@ -670,7 +681,7 @@ def case_card(c, k=0, ed=False, hide=False):
     return ('<a class="case-card" href="{{base}}keysy/%s/" data-reveal data-fi data-mp="|%s|" data-svc="|%s|"%s%s>%s<span class="cc-body">'
             '<span class="cc-tags">%s%s</span><b class="cc-title">%s</b>%s</span></a>'
             % (c['slug'], '|'.join(c['mp']), '|'.join(esc(s) for s in c['services']),
-               ' data-cap="%d"' % k if ed else '', ' hidden' if hide else '', pic, mp_badges(c),
+               ' data-cap="%d"' % k if ed else '', ' hidden' if hide else '', ('<span class="cc-demo">Демо-кейс</span>' if c['demo'] else '') + pic, mp_badges(c),
                '<span class="cc-niche">%s</span>' % esc(c['niche']) if c['niche'] else '', esc(c['title']),
                '<span class="cc-res"><strong>%s</strong><span>%s</span></span>' % (esc(big['value']), esc(big.get('label') or '')) if big else
                '<span class="cc-ex">%s</span>' % esc(c['excerpt']) if c['excerpt'] else ''))
@@ -694,6 +705,7 @@ def case_page(c):
     svc_links = ''.join('<a class="chip" href="%s">%s</a>' % ('{{base}}sait/' if s == 'sait' else '{{base}}uslugi/%s/' % s, esc(BY_SLUG[s]['title'])) for s in c['services'] if s in BY_SLUG)
     more = [x for x in CASES if x['slug'] != c['slug']][:3]
     body = ''.join(x for x in (
+        DEMO_NOTE % ('Это демо-кейс.', 'Магазин и цифры условные — так на сайте будет выглядеть настоящий кейс.') if c['demo'] else '',
         '<figure class="case-cover"><img src="%s" alt="" decoding="async"></figure>' % esc(media(c['cover'])) if c['cover'] else '',
         '<ul class="case-nums case-nums-lg" data-reveal>%s</ul>' % nums if nums else '',
         chart_block(c),
@@ -703,7 +715,8 @@ def case_page(c):
         '<div class="video-box" data-reveal>%s</div>' % video_html(c['video'], c['cover']) if c['video'] else '',
         '<div class="case-svcs" data-reveal><span>Услуги в этом кейсе:</span>%s</div>' % svc_links if svc_links else ''))
     return ('<section class="phero">{{phero-bg}}<div class="wrap narrow">%s<div class="np-meta">%s%s%s</div><h1 class="heading-2 grad">%s</h1>%s</div></section>'
-            % (crumbs(('Кейсы', '{{base}}keysy/'), (c['title'], None)), ''.join('<span class="chip mpc mpc-%s">%s</span>' % (k, MP[k]) for k in c['mp']),
+            % (crumbs(('Кейсы', '{{base}}keysy/'), (c['title'], None)),
+               ('<span class="chip chip-demo">Демо-кейс</span>' if c['demo'] else '') + ''.join('<span class="chip mpc mpc-%s">%s</span>' % (k, MP[k]) for k in c['mp']),
                '<span class="chip">%s</span>' % esc(c['niche']) if c['niche'] else '', '<span class="chip">%s</span>' % esc(c['period']) if c['period'] else '',
                esc(c['title']), '<p class="lead">%s</p>' % esc(c['excerpt']) if c['excerpt'] else '')
             + '<section class="sec sec-tight"><div class="wrap narrow"><div class="case-page">%s</div>'
@@ -1025,8 +1038,8 @@ def blk_cases_list(b, d, ed):
     if not CASES:
         return ('<section class="sec sec-tight" aria-label="Кейсы"><div class="wrap"><div class="empty empty-cases"><span class="sk" aria-hidden="true"><i></i><i></i><i></i></span>'
                 '{{icon:chart-line-up}}<p>Скоро здесь появятся кейсы: графики продаж на Wildberries и Ozon, цифры до и после и что мы сделали.</p></div></div></section>')
-    return ('<section class="sec sec-tight" aria-label="Все кейсы"><div class="wrap">%s<div class="case-grid">%s</div></div></section>'
-            % (case_filters(CASES), ''.join(case_card(c, k) for k, c in enumerate(CASES))))
+    return ('<section class="sec sec-tight" aria-label="Все кейсы"><div class="wrap">%s%s<div class="case-grid">%s</div></div></section>'
+            % (demo_note(CASES), case_filters(CASES), ''.join(case_card(c, k) for k, c in enumerate(CASES))))
 
 def blk_news_list(b, d, ed):
     return '<section class="sec sec-tight" aria-label="Все новости и статьи"><div class="wrap">%s%s</div></section>' % (news_filters(NEWS), news_cards(NEWS))
@@ -1417,7 +1430,7 @@ PAGES_OUT = [(url, site_page(key)) for key, url, _, _ in PAGE_KEYS] + [
 ] + [('uslugi/%s/' % s['slug'], page('uslugi', '%s — %s' % (s['title'], COMPANY), s.get('short', ''), fill(service_body(s)))) for s in SERVICES if s['slug'] != 'sait'] \
   + [('novosti/%s/' % n['slug'], page('novosti', '%s — %s' % (n['seo_title'] or n['title'], COMPANY), n['seo_description'] or n['excerpt'] or n['title'],
                                        fill(news_post(n)), head=article_ld(n), og_type='article', og_image=abs_url(media(n['cover'])) if n['cover'] else None)) for n in NEWS] \
-  + [('keysy/%s/' % c['slug'], page('keysy', '%s — %s' % (c['title'], COMPANY), c['excerpt'] or c['title'], fill(case_page(c)),
+  + [('keysy/%s/' % c['slug'], page('keysy', '%s%s — %s' % (c['title'], ' (демо-кейс)' if c['demo'] else '', COMPANY), c['excerpt'] or c['title'], fill(case_page(c)),
                                      og_image=abs_url(media(c['cover'])) if c['cover'] else None)) for c in CASES] \
   + [('dokumenty/%s/' % d['slug'], page('dokumenty', '%s — %s' % (d['title'], COMPANY), d['title'], fill(doc_page(d)), sticky=False)) for d in DOCS] \
   + [('%s/' % p['slug'], page(p['slug'], '%s — %s' % (p.get('title') or p['slug'], COMPANY), p.get('description', ''), fill(''.join(block_html(b) for b in p.get('blocks') or []))))
