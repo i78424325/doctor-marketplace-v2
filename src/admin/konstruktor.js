@@ -8,7 +8,9 @@
   const J = window.DMJournal || null;
   const BASE = location.pathname.replace(/admin\/[^/]*$/, '');
   const API = 'https://api.github.com';
-  const DRAFT = 'dm-builder-draft:home';
+  const PAGE = (new URLSearchParams(location.search).get('page') || 'home').replace(/[^a-z0-9-]/g, '') || 'home'; // какую страницу правим
+  const DRAFT = 'dm-builder-draft:' + PAGE; // у каждой страницы свой черновик
+  const EDIT = BASE + 'admin/edit/' + PAGE + '/';
   const $ = (s, c) => (c || document).querySelector(s);
   const $$ = (s, c) => Array.from((c || document).querySelectorAll(s));
   const LS = {
@@ -105,7 +107,8 @@
   async function boot() {
     bindShell();
     try {
-      const r = await fetch(BASE + 'admin/edit/data.json?nc=' + Date.now(), { cache: 'no-store' });
+      const r = await fetch(EDIT + 'data.json?nc=' + Date.now(), { cache: 'no-store' });
+      if (r.status === 404 && PAGE !== 'home') { location.replace('konstruktor.html'); return; } // такой страницы в конструкторе нет — на главную
       if (!r.ok) throw new Error('HTTP ' + r.status);
       S.data = await r.json();
     } catch (e) {
@@ -113,17 +116,19 @@
       setNote('Ошибка загрузки', 'warn');
       return;
     }
+    ui.page.innerHTML = (S.data.pages || [S.data.page]).map(p => '<option value="' + esc(p.key) + '"' + (p.key === PAGE ? ' selected' : '') + '>' + esc(p.title) + '</option>').join('');
     S.rev = S.data.rev || 'local';
     S.doc = clone(S.data.doc);
     S.sha[S.data.page.file] = S.data.page.sha || null;
+    NICE[S.data.page.file] = 'страница «' + (S.data.page.title || PAGE) + '»';
     Object.keys(S.data.sources || {}).forEach(n => {
       const s = S.data.sources[n];
       S.src[n] = { file: s.file, doc: clone(s.doc) || {} };
       S.sha[s.file] = s.sha || null;
     });
-    $('#k-page').textContent = S.data.page.title || 'Главная';
+    document.title = 'Конструктор: ' + (S.data.page.title || 'Главная') + ' — Доктор Маркетплейс';
     ui.frame.addEventListener('load', initFrame, { once: true });
-    ui.frame.src = BASE + 'admin/edit/?edit=1&r=' + encodeURIComponent(String(S.rev).slice(0, 12)) + '&t=' + Date.now();
+    ui.frame.src = EDIT + '?edit=1&r=' + encodeURIComponent(String(S.rev).slice(0, 12)) + '&t=' + Date.now();
     authCheck();
     updateStatus();
   }
@@ -131,7 +136,10 @@
   function bindShell() {
     ui.frame = $('#k-frame'); ui.stage = $('#k-stage'); ui.panel = $('#k-panel'); ui.status = $('#k-status'); ui.pub = $('#k-pub');
     ui.undo = $('#k-undo'); ui.redo = $('#k-redo'); ui.toast = $('#k-toast'); ui.modal = $('#k-modal'); ui.login = $('#k-login');
+    ui.page = $('#k-page'); ui.close = $('#k-close');
     ui.pub.addEventListener('click', publish);
+    ui.page.addEventListener('change', () => leave('konstruktor.html' + (ui.page.value === 'home' ? '' : '?page=' + encodeURIComponent(ui.page.value)), 'page'));
+    ui.close.addEventListener('click', () => leave('./', 'close'));
     ui.undo.addEventListener('click', undo);
     ui.redo.addEventListener('click', redo);
     ui.canvas = $('.kcanvas');
@@ -150,11 +158,32 @@
     window.addEventListener('beforeunload', e => {
       if (!S.dirty.size) return;
       saveDraftNow();
+      if (S.leaving) return; // уходим сами (другая страница, «Закрыть») — черновик уже сохранён, лишний вопрос браузера не нужен
       e.preventDefault();
       e.returnValue = '';
     });
     window.addEventListener('storage', e => { if (e.key === 'sveltia-cms.user') authCheck(); });
     bindPanel();
+  }
+
+  /* уйти из конструктора: на другую страницу сайта или «Закрыть». Неопубликованные правки — сначала вопрос */
+  function leave(url, why) {
+    const close = why === 'close';
+    ui.page.value = PAGE; // пока решаем — в списке остаётся текущая страница
+    const go = () => {
+      S.leaving = true;
+      saveDraftNow();
+      if (close) { // вкладку открыли кнопкой из админки — закрываем её; если браузер не дал — переходим в админку
+        try { window.close(); } catch (e) { /* не закрывается */ }
+        setTimeout(() => { location.href = url; }, 300);
+      } else location.href = url;
+    };
+    if (S.editing) S.editing.blur();
+    if (!S.dirty.size) { go(); return; }
+    modal('<h2>Есть неопубликованные правки</h2><p>' + (close ? 'Если закрыть сейчас' : 'Если перейти на другую страницу') +
+      ', правки останутся черновиком в этом браузере: конструктор предложит вернуть их, когда вы снова откроете эту страницу.</p>',
+      [['Опубликовать и ' + (close ? 'закрыть' : 'перейти'), async () => { if (await publish()) go(); }, 'primary'],
+       [close ? 'Закрыть, оставить черновик' : 'Перейти, оставить черновик', go], ['Отмена']]);
   }
 
   /* «Компьютер» — всегда настоящая ширина сайта (1280 px), планшет — 820, телефон — 390. Не влезает в окно — страница уменьшается целиком */
@@ -1110,8 +1139,10 @@
       undoButtons();
       watchDeploy(oid);
       toast('Опубликовано. Сайт обновится примерно через минуту');
+      return true;
     } catch (e) {
       toast(e && e.message ? e.message : 'Не получилось опубликовать. Попробуйте ещё раз.', { err: true });
+      return false;
     } finally {
       S.busy = false;
       ui.pub.classList.remove('loading');
@@ -1124,7 +1155,7 @@
     setNote('Опубликовано · сайт обновляется…', 'ok');
     S.watch = setInterval(async () => {
       try {
-        const r = await fetch(BASE + 'admin/edit/data.json?nc=' + Date.now(), { cache: 'no-store' });
+        const r = await fetch(EDIT + 'data.json?nc=' + Date.now(), { cache: 'no-store' });
         const j = await r.json();
         if (j.rev === oid) { clearInterval(S.watch); S.watch = 0; setNote('Сайт обновлён', 'ok'); return; }
       } catch (e) { /* повторим */ }

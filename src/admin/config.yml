@@ -212,37 +212,11 @@ singletons:
           - { name: text, label: 'Описание', widget: string }
 
   - name: texts
-    label: 'Заголовки страниц'
+    label: 'Призыв записаться внизу страниц'
     icon: title
     file: content/texts.json
     fields:
-      - { name: uslugi, label: 'Страница «Услуги»', widget: object, collapsed: true, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: lead, label: 'Подзаголовок', widget: text }] }
-      - name: o_nas
-        label: 'Страница «О компании»'
-        widget: object
-        collapsed: true
-        fields:
-          - { name: title, label: 'Заголовок', widget: string }
-          - { name: lead, label: 'Подзаголовок', widget: text }
-          - name: why
-            label: 'Почему мы — карточки'
-            label_singular: 'карточку'
-            widget: list
-            summary: '{{fields.text}}'
-            fields:
-              - { name: icon, label: 'Значок', widget: select, options: [chart-bar, clock, users-three, shield-check, seal-check, target, lightning, star, chart-line-up, rocket-launch] }
-              - { name: text, label: 'Текст', widget: string }
-      - { name: voprosy, label: 'Страница «Вопросы»', widget: object, collapsed: true, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: lead, label: 'Подзаголовок', widget: text }] }
-      - name: kontakty
-        label: 'Страница «Контакты»'
-        widget: object
-        collapsed: true
-        fields:
-          - { name: title, label: 'Заголовок', widget: string }
-          - { name: lead, label: 'Подзаголовок', widget: text }
-          - { name: meeting, label: 'Что будет на встрече', widget: list, field: { name: item, label: 'Пункт', widget: string } }
-      - { name: novosti, label: 'Страница «Новости»', widget: object, collapsed: true, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: lead, label: 'Подзаголовок', widget: text }] }
-      - { name: cta, label: 'Призыв записаться внизу страниц', widget: object, collapsed: true, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: text, label: 'Текст', widget: text }, { name: button, label: 'Текст кнопки', widget: string }] }
+      - { name: cta, label: 'Призыв записаться', hint: 'Заголовки и тексты страниц теперь правятся в конструкторе (зелёная кнопка внизу слева). Здесь — общая плашка «Начните с бесплатной консультации»: её показывают страницы услуг, новости и блоки без своего текста.', widget: object, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: text, label: 'Текст', widget: text }, { name: button, label: 'Текст кнопки', widget: string }] }
 
 collections:
   - name: news

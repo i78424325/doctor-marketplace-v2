@@ -1,0 +1,27 @@
+{
+  "title": "Новости",
+  "blocks": [
+    {
+      "id": "phero",
+      "type": "phero",
+      "data": {
+        "chip": "Новости",
+        "title": "Новости и статьи",
+        "lead": "Новости компании, разборы и полезные материалы для селлеров Wildberries и Ozon."
+      },
+      "style": {}
+    },
+    {
+      "id": "news-list",
+      "type": "news-list",
+      "data": {},
+      "style": {}
+    },
+    {
+      "id": "cta",
+      "type": "cta",
+      "data": {},
+      "style": {}
+    }
+  ]
+}

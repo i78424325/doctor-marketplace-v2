@@ -10,8 +10,9 @@
 </head>
 <body>
 <header class="kbar">
+  <button type="button" class="kbtn kghost kclose" id="k-close" title="Закрыть конструктор и вернуться в админку"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg><span>Закрыть</span></button>
   <a class="kbrand" href="{{base}}" target="_blank" rel="noopener" title="Открыть сайт в новой вкладке"><img src="../favicon.svg" alt="" width="28" height="28"><span>Конструктор</span></a>
-  <span class="kpage" id="k-page">Главная</span>
+  <label class="kpage"><span class="visually-hidden">Страница</span><select id="k-page" title="Какую страницу править"><option>Главная</option></select></label>
   <div class="kdev" role="group" aria-label="Как показать страницу">
     <button type="button" data-dev="desktop" aria-pressed="true" title="Компьютер"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>Компьютер</span></button>
     <button type="button" data-dev="tablet" aria-pressed="false" title="Планшет"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M11 18h2"/></svg><span>Планшет</span></button>

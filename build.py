@@ -12,6 +12,7 @@ BASE = os.environ.get('SITE_BASE', '/doctor-marketplace-v2/')
 SITE = os.environ.get('SITE_URL', 'https://i78424325.github.io').rstrip('/') + BASE
 VER = time.strftime('%m%d%H%M')
 INDEX = os.environ.get('SITE_INDEX') == '1'  # 1 — открыть сайт поисковикам (когда переедет на свой домен)
+REV = os.environ.get('GITHUB_SHA') or 'local'  # какая версия репозитория собрана — конструктор сверяет её с последней правкой
 
 def esc(s):
     """Экранирование для HTML. Фигурные скобки тоже: текст из админки никогда не станет шаблонным тегом {{…}}."""
@@ -504,14 +505,18 @@ def cases_html(s):
                       '<ul class="case-nums">%s</ul>' % res if res else '', md(c.get('text', ''))))
     return '<div class="cases">' + ''.join(out) + '</div>'
 
-def cta_band(title=None, text=None, button=None, ed=False):
+def cta_band(title=None, text=None, button=None, ed=False, link=None):
+    """Тёмная плашка с кнопкой: по умолчанию — окно записи; link — своя страница (например brief/)."""
     t = TX.get('cta') or {}
-    return ('<section class="sec" aria-label="Бесплатная консультация"><div class="wrap"><div class="cta-band" data-reveal>'
+    btn = button or t.get('button') or 'Записаться'
+    return ('<section class="sec" aria-label="%s"><div class="wrap"><div class="cta-band" data-reveal>'
             '<div><h2 class="heading-3"%s>%s</h2><p%s>%s</p></div>'
-            '<div class="hero-cta"><a class="btn btn-primary btn-lg btn-shine" href="{{base}}kontakty/" data-lead><span%s>%s</span>{{icon:arrow-right}}</a></div></div></div></section>'
-            % (ea(ed, 'title', fb=t.get('title') or 'Начните с бесплатной консультации'), esc(title or t.get('title') or 'Начните с бесплатной консультации'),
+            '<div class="hero-cta"><a class="btn btn-primary btn-lg btn-shine" href="%s"%s><span%s>%s</span>{{icon:arrow-right}}</a></div></div></div></section>'
+            % (esc(btn) if link else 'Бесплатная консультация',
+               ea(ed, 'title', fb=t.get('title') or 'Начните с бесплатной консультации'), esc(title or t.get('title') or 'Начните с бесплатной консультации'),
                ea(ed, 'text', fb=t.get('text') or ''), esc(text or t.get('text') or ''),
-               ea(ed, 'button', fb=t.get('button') or 'Записаться'), esc(button or t.get('button') or 'Записаться')))
+               '{{base}}' + link if link else '{{base}}kontakty/', '' if link else ' data-lead',
+               ea(ed, 'button', fb=t.get('button') or 'Записаться'), esc(btn)))
 
 OPTIONS = '<option value="">Пока не знаю</option>' + ''.join('<option value="%s">%s</option>' % (s['slug'], esc(s['title'])) for s in SERVICES)
 
@@ -541,12 +546,6 @@ SAIT = next((s for s in SERVICES if s['slug'] == 'sait'), None)
 def sait_price():
     return '<div class="price-row">%s</div>' % price_html(SAIT, 'price-lg') if SAIT and price_value(SAIT) else ''
 
-def sait_cases():
-    if not SAIT or not [c for c in (SAIT.get('cases') or []) if c.get('title')]:
-        return ''
-    return ('<section class="sec" aria-labelledby="scase-h"><div class="wrap"><div class="sec-head" data-reveal><span class="chip">Кейсы</span>'
-            '<h2 class="heading-2" id="scase-h">Результаты по услуге «%s»</h2></div><div style="margin-top:40px">%s</div></div></section>'
-            % (esc(SAIT['title']), cases_html(SAIT)))
 
 def block_html(b):
     """Блоки страниц, собранных в админке (раздел «Страницы»)."""
@@ -628,46 +627,218 @@ def blk_tagline(b, d, ed):
     return '<section class="tagline" aria-label="Наш подход"><div class="wrap"><p%s>%s</p></div></section>' % (ea(ed, 'text', 'tagline'), tagline_words(d.get('text')))
 
 def blk_founder(b, d, ed):
-    return ('<section class="sec" aria-label="Основатель компании"><div class="wrap">%s</div></section>'
-            % founder_html('<a class="btn btn-ghost" href="{{base}}o-nas/"><span>О компании</span>{{icon:arrow-right}}</a>', ed))
+    """cta: about — кнопка «О компании» (главная), lead — запись на консультацию (страница «О компании»); tight — меньше отступы."""
+    cta = ('<a class="btn btn-primary btn-shine" href="{{base}}kontakty/" data-lead><span>Получить бесплатную консультацию</span>{{icon:arrow-right}}</a>'
+           if d.get('cta') == 'lead' else '<a class="btn btn-ghost" href="{{base}}o-nas/"><span>О компании</span>{{icon:arrow-right}}</a>')
+    return '<section class="sec%s" aria-label="Основатель компании"><div class="wrap">%s</div></section>' % (' sec-tight' if d.get('tight') else '', founder_html(cta, ed))
 
 def blk_news(b, d, ed):
     return ('<section class="sec sec-alt" aria-labelledby="%s"><div class="wrap">%s<div style="margin-top:40px">%s</div></div></section>'
             % (hid(b, 'news-h'), head_html(b, d, ed, 'news-h', link=('{{base}}novosti/', 'Все новости')), news_cards(NEWS[:3])))
 
 def blk_steps(b, d, ed):
+    """list: items — «Как мы работаем», site — «Как начать» (шаги заказа сайта)."""
+    site = d.get('list') == 'site'
+    h = 'start-h' if site else 'how-h'
     return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s%s</div></section>'
-            % (hid(b, 'how-h'), head_html(b, d, ed, 'how-h', 'Как мы работаем', 'Четыре шага от первой встречи до стабильного роста'),
-               steps_html(STEPS.get('items') or [], ed=ed)))
+            % (hid(b, h), head_html(b, d, ed, h, 'Как начать' if site else 'Как мы работаем',
+                                    'Три шага до своего магазина' if site else 'Четыре шага от первой встречи до стабильного роста'),
+               steps_html(STEPS.get('site' if site else 'items') or [], ed=ed, lst='site' if site else 'items')))
 
 def blk_faq(b, d, ed):
+    """topic: site — вопросы о сайте (без ссылки «Все вопросы»), иначе — первые шесть общих."""
+    site = d.get('topic') == 'site'
+    h = 'sfaq-h' if site else 'hfaq-h'
+    items = [i for i in FAQ if i.get('topic') == 'site'] if site else [i for i in FAQ if i.get('topic') != 'site'][:6]
     return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="faq" style="margin-top:40px;max-width:880px">%s</div></div></section>'
-            % (hid(b, 'hfaq-h'), head_html(b, d, ed, 'hfaq-h', 'Вопрос — ответ', 'Частые вопросы', ('{{base}}voprosy/', 'Все вопросы')),
-               faq_html([i for i in FAQ if i.get('topic') != 'site'][:6])))
+            % (hid(b, h), head_html(b, d, ed, h, 'Вопрос — ответ', 'Частые вопросы о сайте' if site else 'Частые вопросы',
+                                    None if site else ('{{base}}voprosy/', 'Все вопросы')), faq_html(items)))
 
 def blk_cta(b, d, ed):
-    return cta_band(d.get('title'), d.get('text'), d.get('button'), ed)
+    link = re.sub(r'[^a-z0-9/_-]', '', str(d.get('link') or '')) or None
+    return cta_band(d.get('title'), d.get('text'), d.get('button'), ed, link)
 
-BLOCKS = {  # тип → (название в конструкторе, что внутри, сборка)
-    'hero': ('Первый экран', 'Заголовок, кнопка записи, видео-визитка', blk_hero),
+# ---------- блоки остальных страниц: «Услуги», «Сайт для селлера», «О компании», «Вопросы», «Контакты», «Новости» ----------
+CTX = {'crumb': None}  # подпись страницы в «хлебных крошках»; ставится, пока собирается страница
+
+def chip_html(text, ed, accent=False, badge=None):
+    if accent:  # зелёная метка: с точкой или с плашкой «НОВОЕ»
+        first = '<span class="badge-new"%s>%s</span>' % (ea(ed, 'badge'), esc(badge)) if badge is not None else '<i class="dot"></i>'
+        return '<span class="chip chip-accent">%s%s</span>' % (first, '<span%s>%s</span>' % (ea(ed, 'chip'), esc(text)) if ed else esc(text))
+    return '<span class="chip"%s>%s</span>' % (ea(ed, 'chip'), esc(text))
+
+def crumbs_here():
+    return crumbs((CTX['crumb'], None)) if CTX['crumb'] else ''
+
+def blk_phero(b, d, ed):
+    return ('<section class="phero" aria-labelledby="%s">{{phero-bg}}<div class="wrap">%s%s<h1 class="heading-1 grad" id="%s"%s>%s</h1><p class="lead"%s>%s</p></div></section>'
+            % (hid(b, 'ph'), crumbs_here(), chip_html(d.get('chip', ''), ed, d.get('accent')), hid(b, 'ph'), ea(ed, 'title'), esc(d.get('title', '')),
+               ea(ed, 'lead'), esc(d.get('lead', ''))))
+
+SAIT_HERO = {'badge': 'НОВОЕ', 'chip': 'Сайт для селлера', 'title': 'Свой сайт — продажи без комиссии маркетплейса',
+             'lead': 'Покупатели с Wildberries и Ozon возвращаются к вам напрямую: свой магазин, свои цены и своя база клиентов. Делаем вместе с партнёром — командой OS Ecom.',
+             'button': 'Заполнить бриф — 5 минут', 'link_text': 'Наши сайты'}
+def blk_sait_hero(b, d, ed):
+    return ('<section class="phero" aria-labelledby="%s">{{phero-bg}}<div class="wrap phero-grid"><div>%s%s<h1 class="heading-1 grad" id="%s"%s>%s</h1>'
+            '<p class="lead"%s>%s</p>{{sait-price}}<div class="hero-cta"><a class="btn btn-primary btn-lg btn-shine" href="{{base}}brief/"><span%s>%s</span>{{icon:arrow-right}}</a>'
+            '<a class="link-arrow" href="#portfolio"><span%s>%s</span>{{icon:arrow-right}}</a></div></div>'
+            '<div class="phero-viz phero-viz-sait" data-play aria-hidden="true"><div class="viz">{{viz:sait}}</div></div></div></section>'
+            % (hid(b, 'ph'), crumbs_here(), chip_html(d.get('chip', ''), ed, True, d.get('badge') or ''), hid(b, 'ph'), ea(ed, 'title'), esc(d.get('title', '')),
+               ea(ed, 'lead'), esc(d.get('lead', '')), ea(ed, 'button', fb=SAIT_HERO['button']), esc(d.get('button') or SAIT_HERO['button']),
+               ea(ed, 'link_text', fb=SAIT_HERO['link_text']), esc(d.get('link_text') or SAIT_HERO['link_text'])))
+
+def blk_services_all(b, d, ed):
+    return ('<section class="sec sec-tight" aria-label="Список услуг"><div class="wrap"><div class="bento" style="margin-top:0"%s>%s</div></div></section>'
+            % (el(ed, 'services', True, 'services'), bento_html(ed)))
+
+SAIT_FEATS = [('browser', 'Админ-панель', 'Полностью редактируете все карточки: фото, тексты, цены, наличие'),
+              ('chart-line-up', 'Статистика и Метрика', 'Аналитика в админке и Яндекс Метрика с Вебвизором'),
+              ('magnifying-glass', 'Индексация в поиске', 'Все страницы в Яндексе и Google — сайт находят в поиске'),
+              ('storefront', 'Личный кабинет', 'Заказы, статусы и бонусы покупателя'),
+              ('truck', 'Доставка и оплата', 'СДЭК, Яндекс и другие службы, онлайн-оплата и СБП'),
+              ('telegram-logo', 'Заказы в Телеграм', 'Каждый заказ сразу приходит на почту и в Телеграм')]
+def blk_features(b, d, ed):
+    items = ''.join('<div class="feat" data-reveal%s%s><span class="ic">%s</span><div><b%s>%s</b><span%s>%s</span></div></div>'
+                    % (' style="--d:%dms"' % (k % 3 * 60) if k % 3 else '', ei(ed), icon(f.get('icon')), ea(ed, 'title'), esc(f.get('title', '')), ea(ed, 'text'), esc(f.get('text', '')))
+                    for k, f in enumerate(x for x in d.get('items') or [] if isinstance(x, dict)))
+    return ('<section class="sec sec-tight" aria-labelledby="%s"><div class="wrap">%s<div class="feats"%s>%s</div></div></section>'
+            % (hid(b, 'feat-h'), head_html(b, d, ed, 'feat-h', 'Что будет на сайте', 'Всё для продаж — уже внутри'), el(ed, 'items'), items))
+
+def blk_why(b, d, ed):
+    items = ''.join('<div class="card" data-reveal style="--d:%dms"%s><span class="ic">%s</span><p%s>%s</p></div>' % (k * 60, ei(ed), icon(w.get('icon')), ea(ed, 'text'), esc(w.get('text', '')))
+                    for k, w in enumerate(x for x in d.get('items') or [] if isinstance(x, dict)))
+    return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="why"%s>%s</div></div></section>'
+            % (hid(b, 'why-h'), head_html(b, d, ed, 'why-h', 'Почему мы', 'За вашим магазином — целая команда'), el(ed, 'items'), items))
+
+PORTFOLIO = ('Портфолио', 'Наши сайты', 'Работающий магазин электроники и три демо-сайта для разных ниш. Нажмите, чтобы открыть сайт.')
+def blk_portfolio(b, d, ed):
+    return ('<section class="sec" id="%s" aria-labelledby="%s"><div class="wrap"><div class="sec-head" data-reveal><span class="chip"%s>%s</span>'
+            '<h2 class="heading-2" id="%s"%s>%s</h2><p%s>%s</p></div><div style="margin-top:40px">{{proj-feature}}</div>{{demos}}</div></section>'
+            % (hid(b, 'portfolio'), hid(b, 'ex-h'), ea(ed, 'chip', fb=PORTFOLIO[0]), esc(d.get('chip') or PORTFOLIO[0]), hid(b, 'ex-h'),
+               ea(ed, 'title', fb=PORTFOLIO[1]), esc(d.get('title') or PORTFOLIO[1]), ea(ed, 'text', fb=PORTFOLIO[2]), esc(d.get('text') or PORTFOLIO[2])))
+
+def blk_cases(b, d, ed):
+    """Кейсы услуги из «Разделов»; пока их нет — на сайте блока нет, в конструкторе видна заглушка."""
+    s = BY_SLUG.get(d.get('service') or 'sait')
+    if s and [c for c in (s.get('cases') or []) if c.get('title')]:
+        return ('<section class="sec" aria-labelledby="%s"><div class="wrap"><div class="sec-head" data-reveal><span class="chip">Кейсы</span>'
+                '<h2 class="heading-2" id="%s">Результаты по услуге «%s»</h2></div><div style="margin-top:40px">%s</div></div></section>'
+                % (hid(b, 'scase-h'), hid(b, 'scase-h'), esc(s['title']), cases_html(s)))
+    if ed:
+        return ('<section class="sec sec-tight" aria-label="Кейсы"><div class="wrap"><div class="empty">{{icon:chart-line-up}}'
+                '<p>Кейсы услуги «%s» появятся здесь, когда их добавят в «Разделах»: «Услуги, цены и кейсы».</p></div></div></section>' % esc(s['title'] if s else ''))
+    return ''
+
+def blk_news_list(b, d, ed):
+    return '<section class="sec sec-tight" aria-label="Все новости"><div class="wrap">%s</div></section>' % news_cards(NEWS)
+
+FAQ_ASIDE = ('Не нашли свой вопрос?', 'Задайте его на бесплатной консультации: разберём ваш магазин и подскажем, с чего начать.', 'Задать вопрос')
+def blk_faq_page(b, d, ed):
+    return ('<section class="sec sec-tight" aria-label="Вопросы и ответы"><div class="wrap"><div class="faq-grid"><div class="faq">%s</div>'
+            '<aside class="faq-aside" aria-labelledby="%s"><span class="ic">{{icon:chats-circle}}</span><h2 class="heading-6" id="%s"%s>%s</h2><p class="body-6"%s>%s</p>'
+            '<a class="btn btn-primary btn-shine" href="{{base}}kontakty/" data-lead><span%s>%s</span>{{icon:arrow-right}}</a>'
+            '<a class="tel" href="tel:{{phone_href}}">{{icon:phone}}{{phone}}</a></aside></div></div></section>'
+            % (faq_html(FAQ), hid(b, 'faq-aside-h'), hid(b, 'faq-aside-h'), ea(ed, 'aside_title', fb=FAQ_ASIDE[0]), esc(d.get('aside_title') or FAQ_ASIDE[0]),
+               ea(ed, 'aside_text', fb=FAQ_ASIDE[1]), esc(d.get('aside_text') or FAQ_ASIDE[1]), ea(ed, 'button', fb=FAQ_ASIDE[2]), esc(d.get('button') or FAQ_ASIDE[2])))
+
+CONTACT = ('Что будет на встрече', 'Удобнее в мессенджере?', 'Наведите камеру на QR-код или нажмите кнопку — бот запишет вас за пару касаний.')
+CONTACT_FORM = (
+    '<form class="form" id="consult-form" data-lead-form novalidate>'
+    '<div class="field"><label for="f-name">Как к вам обращаться <b>*</b></label><input class="inp" id="f-name" name="name" type="text" autocomplete="name" placeholder="Имя" required><p class="err" id="f-name-err" aria-live="polite"></p></div>'
+    '<div class="field"><label for="f-contact">Телефон или ник в Телеграме <b>*</b></label><input class="inp" id="f-contact" name="contact" type="text" autocomplete="tel" placeholder="+7 900 000-00-00 или @username" required><p class="err" id="f-contact-err" aria-live="polite"></p></div>'
+    '<div class="field"><label for="f-store">Название магазина или ссылка</label><input class="inp" id="f-store" name="store" type="text" autocomplete="organization" placeholder="Например, «Уютный дом» на Wildberries"></div>'
+    '<div class="field"><label for="f-service">Что вас интересует</label><select class="inp" id="f-service" name="service">{{service-options}}</select></div>'
+    '<div class="field"><label for="f-comment">Комментарий</label><div class="voice-wrap"><textarea class="inp" id="f-comment" name="comment" rows="3" placeholder="Коротко о вашем магазине и задаче"></textarea><button type="button" class="mic" data-mic="f-comment" aria-label="Надиктовать голосом">{{icon:microphone}}</button></div><p class="voice-status" id="f-comment-st" aria-live="polite"></p></div>'
+    '<div class="consents">{{consents-form}}</div><p class="err form-err" aria-live="polite"></p>'
+    '<button class="btn btn-primary btn-lg btn-shine" type="submit"><span>Получить консультацию</span></button>'
+    '<p class="demo-note" data-demo>Демо-версия: заявка пока никуда не отправляется</p></form>'
+    '<div class="done" hidden tabindex="-1"><span class="ok">{{icon:check}}</span><h2 class="heading-5">Заявка принята</h2>'
+    '<p data-done-text>В рабочей версии заявка сразу придёт менеджеру и в amoCRM, и с вами свяжутся. Сейчас это демо: заявка никуда не отправлена.</p>'
+    '<a class="link-arrow link-acc" href="{{base}}uslugi/"><span>Пока посмотреть услуги</span>{{icon:arrow-right}}</a></div>')
+def blk_contact(b, d, ed):
+    meet = ''.join('<li%s>%s<span%s>%s</span></li>' % (ei(ed), icon(MEET_ICONS[k % len(MEET_ICONS)]), ea(ed, '.'), esc(t))
+                   for k, t in enumerate(x for x in d.get('items') or [] if isinstance(x, str)))
+    return ('<section class="sec sec-tight" aria-label="Заявка и контакты"><div class="wrap"><div class="cta-box"><div>'
+            '<h2 class="heading-5"%s>%s</h2><ul class="checks"%s>%s</ul>'
+            '<h2 class="heading-6" style="margin-top:40px"%s>%s</h2><p class="body-6 muted" style="margin-top:8px"%s>%s</p>'
+            '<div class="msg-row"><a class="msg-btn msg-max" href="{{base}}kontakty/" data-lead data-channel="max"><b class="max-mini">MAX</b>MAX</a>'
+            '<a class="msg-btn msg-tg" href="{{base}}kontakty/" data-lead data-channel="tg">{{icon:telegram-logo}}Telegram</a></div>'
+            '<div class="contacts"><a href="tel:{{phone_href}}">{{icon:phone}}{{phone}}</a><a href="mailto:{{email}}">{{icon:envelope-simple}}{{email}}</a></div>'
+            '<div class="docs">{{doc-links}}</div></div><div>'
+            % (ea(ed, 'meet_title', fb=CONTACT[0]), esc(d.get('meet_title') or CONTACT[0]), el(ed, 'items'), meet,
+               ea(ed, 'msg_title', fb=CONTACT[1]), esc(d.get('msg_title') or CONTACT[1]), ea(ed, 'msg_text', fb=CONTACT[2]), esc(d.get('msg_text') or CONTACT[2]))
+            + CONTACT_FORM + '</div></div></div></section>')
+
+PARTNER = ('Сайты и Телеграм-боты для селлеров: свой интернет-магазин, цены и заказы под контролем.', 'Услуга «Сайт для селлера»')
+def blk_partners(b, d, ed):
+    return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="partners"><div class="partner" data-reveal>{{logo-osecom}}<div><p%s>%s</p>'
+            '<a class="link-arrow link-acc" href="{{base}}sait/"><span%s>%s</span>{{icon:arrow-right}}</a></div></div></div></div></section>'
+            % (hid(b, 'partners-h'), head_html(b, d, ed, 'partners-h', 'Наши партнёры', 'Работаем с теми, кто усиливает ваш магазин'),
+               ea(ed, 'text', fb=PARTNER[0]), esc(d.get('text') or PARTNER[0]), ea(ed, 'link_text', fb=PARTNER[1]), esc(d.get('link_text') or PARTNER[1])))
+
+BLOCKS = {  # тип → (название в конструкторе, что внутри, сборка); порядок — как в списке «Добавить блок»
+    'hero': ('Первый экран главной', 'Заголовок, кнопка записи, видео-визитка', blk_hero),
+    'phero': ('Заголовок страницы', 'Метка, крупный заголовок и подзаголовок', blk_phero),
+    'sait-hero': ('Первый экран «Сайт для селлера»', 'Заголовок, цена, кнопка брифа и картинка', blk_sait_hero),
     'clients': ('Наши клиенты', 'Бегущая строка с логотипами', lambda b, d, ed: clients_html(ed, b)),
     'who': ('Это про вас?', 'Карточки «кому поможем» со списками', blk_who),
-    'services': ('Услуги', 'Плитки услуг с ценами', blk_services),
+    'services': ('Услуги', 'Плитки услуг с ценами и заголовком', blk_services),
+    'services-all': ('Все услуги плитками', 'Плитки всех услуг без заголовка', blk_services_all),
     'stats': ('Цифры', 'Опыт в цифрах', blk_stats),
     'tagline': ('Главная мысль', 'Крупная фраза, слова проявляются по очереди', blk_tagline),
+    'features': ('Преимущества с иконками', 'Короткие пункты с иконками в три колонки', blk_features),
+    'why': ('Почему мы', 'Карточки с иконками', blk_why),
     'founder': ('Основатель', 'Фото, имя и достижения', blk_founder),
+    'portfolio': ('Наши сайты', 'Работающий магазин и демо-сайты', blk_portfolio),
+    'cases': ('Кейсы услуги', 'Кейсы «Сайта для селлера» из «Разделов»', blk_cases),
     'news': ('Новости', 'Три последние новости', blk_news),
+    'news-list': ('Все новости', 'Карточки всех новостей', blk_news_list),
     'steps': ('Как мы работаем', 'Шаги работы по порядку', blk_steps),
     'faq': ('Вопросы и ответы', 'Частые вопросы, раскрываются по нажатию', blk_faq),
+    'faq-page': ('Все вопросы', 'Все вопросы и плашка «Не нашли свой вопрос?»', blk_faq_page),
+    'partners': ('Партнёры', 'Карточка партнёра OS Ecom', blk_partners),
+    'contact': ('Заявка и контакты', 'Форма записи, мессенджеры, телефон и почта', blk_contact),
     'cta': ('Призыв записаться', 'Тёмная плашка с кнопкой записи', blk_cta),
 }
 BLOCK_DEFAULTS = {  # с чем появляется новый блок из списка «Добавить блок» (дальше текст правится на месте)
     'hero': {'chip': 'Эксперты по Wildberries и Ozon', 'title': 'Заголовок с [акцентом]', 'lead': 'Коротко: что вы делаете и для кого.', 'button': 'Получить бесплатную консультацию'},
+    'phero': {'chip': 'Раздел', 'title': 'Заголовок страницы', 'lead': 'Коротко о том, что на этой странице.'},
+    'sait-hero': dict(SAIT_HERO),
     'who': {'chip': 'Это про вас?', 'title': 'Заголовок блока', 'cards': [{'label': '01 · Этап', 'title': 'Вы *описание ситуации* клиента', 'items': ['Что сделаем', 'Что получит клиент'], 'link_text': '', 'link': ''}]},
     'services': {'chip': 'Услуги', 'title': 'Полный спектр услуг для вашего успеха на маркетплейсах'},
     'tagline': {'text': 'Главная мысль компании — *важные слова* выделяются цветом.'},
+    'features': {'chip': 'Что вы получите', 'title': 'Заголовок блока', 'items': [{'icon': i, 'title': t, 'text': x} for i, t, x in SAIT_FEATS[:3]]},
+    'why': {'chip': 'Почему мы', 'title': 'За вашим магазином — целая команда', 'items': (TX.get('o_nas') or {}).get('why') or [{'icon': 'seal-check', 'text': 'Чем вы сильны'}]},
     'news': {'chip': 'Новости', 'title': 'Новости и статьи'},
+    'cases': {'service': 'sait'},
+    'contact': {'items': (TX.get('kontakty') or {}).get('meeting') or ['Онлайн-встреча в удобное для вас время']},
 }
+
+# страницы сайта, которые собираются из блоков: ключ (имя файла content/site/<ключ>.json), адрес, подпись в «хлебных крошках», название в конструкторе
+PAGE_KEYS = [('home', '', None, 'Главная'), ('uslugi', 'uslugi/', 'Услуги', 'Услуги'), ('sait', 'sait/', 'Сайт для селлера', 'Сайт для селлера'),
+             ('o-nas', 'o-nas/', 'О компании', 'О компании'), ('voprosy', 'voprosy/', 'Вопросы', 'Вопросы'), ('kontakty', 'kontakty/', 'Контакты', 'Контакты'),
+             ('novosti', 'novosti/', 'Новости', 'Новости')]
+
+def default_page(key):
+    """Страница в том виде, в каком она была до конструктора (заголовки — из texts.json): для переноса и для отката к старым версиям сайта."""
+    T = lambda k: TX.get(k) or {}
+    ph = lambda chip, k, **kw: ('phero', dict(chip=chip, title=T(k).get('title', ''), lead=T(k).get('lead', ''), **kw))
+    pages = {
+        'uslugi': [ph('Услуги', 'uslugi'), ('services-all', {}), ('steps', {}), ('cta', {})],
+        'sait': [('sait-hero', dict(SAIT_HERO)),
+                 ('features', {'chip': 'Что будет на сайте', 'title': 'Всё для продаж — уже внутри', 'items': [{'icon': i, 'title': t, 'text': x} for i, t, x in SAIT_FEATS]}),
+                 ('portfolio', {'chip': PORTFOLIO[0], 'title': PORTFOLIO[1], 'text': PORTFOLIO[2]}), ('cases', {'service': 'sait'}),
+                 ('steps', {'list': 'site'}), ('faq', {'topic': 'site'}),
+                 ('cta', {'title': 'Готовы обсудить свой сайт?', 'text': 'Заполните бриф — по ответам подготовимся к созвону, где обсудим сроки и стоимость. Отвечать можно голосом.',
+                          'button': 'Заполнить бриф', 'link': 'brief/'})],
+        'o-nas': [ph('О компании', 'o_nas'), ('founder', {'cta': 'lead', 'tight': True}),
+                  ('why', {'chip': 'Почему мы', 'title': 'За вашим магазином — целая команда', 'items': T('o_nas').get('why') or []}),
+                  ('stats', {}), ('steps', {}), ('partners', {}), ('cta', {})],
+        'voprosy': [ph('Вопрос — ответ', 'voprosy'), ('faq-page', {})],
+        'kontakty': [ph('Бесплатно и без обязательств', 'kontakty', accent=True), ('contact', {'items': T('kontakty').get('meeting') or []})],
+        'novosti': [ph('Новости', 'novosti'), ('news-list', {}), ('cta', {})],
+    }
+    return {'title': {k: t for k, _, _, t in PAGE_KEYS}[key], 'blocks': [{'id': t, 'type': t, 'data': d, 'style': {}} for t, d in pages[key]]}
 
 def norm_blocks(blocks):
     """У каждого блока — понятный уникальный id и словари data/style; незнакомые типы сохраняются как есть (на сайте их нет)."""
@@ -724,10 +895,11 @@ def legacy_home(raw):
     order = ['hero'] + [s.get('type') if isinstance(s, dict) else s for s in h.get('sections') or []]
     return {'title': 'Главная', 'blocks': [{'id': t, 'type': t, 'data': data.get(t, {}), 'style': {}} for t in order if t in BLOCKS]}
 
-def load_home():
-    d = jload('site/home.json')
+def load_doc(key):
+    """Страница из конструктора: content/site/<ключ>.json; нет файла (откат к старой версии) — прежний вид страницы."""
+    d = jload('site/%s.json' % key)
     if not (isinstance(d, dict) and isinstance(d.get('blocks'), list)):
-        d = legacy_home(jload('home.json'))
+        d = legacy_home(jload('home.json')) if key == 'home' else default_page(key)
     d['blocks'] = norm_blocks(d['blocks'])
     return d
 
@@ -838,16 +1010,9 @@ def demos_html():
 
 # ---------- сборка страниц ----------
 MEET_ICONS = ['calendar-check', 'chart-line-up', 'chats-circle', 'seal-check', 'clock']
-SECTIONS = {
-    '{{bento}}': bento_html(), '{{stats}}': stats_html(), '{{cta-band}}': cta_band(), '{{news-all}}': news_cards(NEWS),
-    '{{founder-about}}': founder_html('<a class="btn btn-primary btn-shine" href="{{base}}kontakty/" data-lead><span>Получить бесплатную консультацию</span>{{icon:arrow-right}}</a>'),
-    '{{steps}}': steps_html(STEPS.get('items') or []), '{{site-steps}}': steps_html(STEPS.get('site') or []), '{{service-options}}': OPTIONS,
-    '{{faq-all}}': faq_html(FAQ), '{{faq-site}}': faq_html([i for i in FAQ if i.get('topic') == 'site']), '{{consents-form}}': consents('f'),
-    '{{why}}': ''.join('<div class="card" data-reveal style="--d:%dms"><span class="ic">%s</span><p>%s</p></div>' % (k * 60, icon(w.get('icon')), esc(w.get('text', '')))
-                       for k, w in enumerate((TX.get('o_nas') or {}).get('why') or [])),
-    '{{meeting}}': ''.join('<li>%s<span>%s</span></li>' % (icon(MEET_ICONS[k % len(MEET_ICONS)]), esc(t)) for k, t in enumerate((TX.get('kontakty') or {}).get('meeting') or [])),
-    '{{proj-feature}}': proj_feature_html(), '{{demos}}': demos_html(), '{{viz:sait}}': VIZ.get('sait', ''),
-    '{{sait-price}}': sait_price(), '{{sait-cases}}': sait_cases(),
+SECTIONS = {  # общие куски, которые блоки и шаблоны вставляют по имени
+    '{{service-options}}': OPTIONS, '{{consents-form}}': consents('f'),
+    '{{proj-feature}}': proj_feature_html(), '{{demos}}': demos_html(), '{{viz:sait}}': VIZ.get('sait', ''), '{{sait-price}}': sait_price(),
     '{{phero-bg}}': '<div class="grid-bg" aria-hidden="true"></div><div class="glow glow-a" aria-hidden="true"></div>',
     '{{doc-links}}': ''.join('<a href="{{base}}dokumenty/%s/">%s</a>' % (d['slug'], esc(d['title'])) for d in DOCS),
 }
@@ -858,13 +1023,39 @@ def fill(text, crumb=None):
     text = re.sub(r'\{\{t:([a-z_]+)\.([a-z_]+)\}\}', lambda m: esc(str((TX.get(m.group(1)) or {}).get(m.group(2), ''))), text)
     return text.replace('{{crumbs}}', crumbs(crumb) if crumb else '')
 
-HOME_DOC = load_home()
-home = fill(render_blocks(HOME_DOC['blocks']))
 parts = re.split(r'<!--@page ([a-z0-9-]+)-->', (SRC / 'pages' / 'inner.html').read_text(encoding='utf-8'))
 inner = {parts[i]: parts[i + 1] for i in range(1, len(parts), 2)}
 FAQ_LD = '<script type="application/ld+json">%s</script>' % json.dumps({'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
     {'@type': 'Question', 'name': str(i['q']), 'acceptedAnswer': {'@type': 'Answer', 'text': re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', answer_html(i.get('a'))))).strip()}}
     for i in FAQ]}, ensure_ascii=False).replace('</', '<\\/').replace('{{', '{\\u007b')
+
+# ---------- страницы из блоков (главная, «Услуги», «Сайт для селлера», «О компании», «Вопросы», «Контакты», «Новости») ----------
+SITE_DOCS = {k: load_doc(k) for k, _, _, _ in PAGE_KEYS}
+CRUMB = {k: c for k, _, c, _ in PAGE_KEYS}
+PAGE_META = {  # заголовок вкладки, описание для поиска (None — подзаголовок страницы), особые настройки страницы
+    'home': ('%s — рост продаж на Wildberries и Ozon' % COMPANY, 'Аналитика, реклама, дизайн карточек, SEO и сопровождение селлеров Wildberries и Ozon. Начните с бесплатной консультации.', {}),
+    'uslugi': ('Услуги — %s' % COMPANY, 'Бизнес-трекер, реклама, дизайн и SEO карточек, фото и видео, работа с покупателями, подбор ниши.', {}),
+    'sait': ('Сайт для селлера — %s' % COMPANY, 'Свой интернет-магазин для селлера Wildberries и Ozon: админ-панель, Метрика, доставка, оплата и заказы в Телеграм.', {}),
+    'o-nas': ('О компании — %s' % COMPANY, None, {}),
+    'voprosy': ('Частые вопросы — %s' % COMPANY, 'Ответы о работе с Wildberries и Ozon, оплате и рекламе.', {'head': FAQ_LD}),
+    'kontakty': ('Бесплатная консультация — %s' % COMPANY, 'Запишитесь на бесплатную онлайн-встречу с аналитиком маркетплейсов.', {'sticky': False, 'scripts': ('voice', 'site')}),
+    'novosti': ('Новости — %s' % COMPANY, None, {}),
+}
+def render_page(key, ed=False):
+    CTX['crumb'] = CRUMB[key]
+    try:
+        return fill(render_blocks(SITE_DOCS[key]['blocks'], ed))
+    finally:
+        CTX['crumb'] = None
+def lead_of(key):
+    b = next((b for b in SITE_DOCS[key]['blocks'] if b['type'] in ('phero', 'sait-hero', 'hero') and not b.get('hidden')), None)
+    return str((b or {}).get('data', {}).get('lead') or '')
+def site_page(key, ed=False):
+    title, desc, kw = PAGE_META[key]
+    if ed:  # версия для конструктора: не для поисковиков, с меткой версии сборки
+        kw = dict(kw, noindex=True, head=kw.get('head', '') + '<meta name="dm-rev" content="%s">' % esc(REV))
+        title = 'Конструктор — %s' % title
+    return page(key, title, lead_of(key) if desc is None else desc, render_page(key, ed), **kw)
 
 def news_post(n):
     if n['video']:
@@ -892,15 +1083,7 @@ DOCS_LIST = ('<section class="phero">{{phero-bg}}<div class="wrap">%s<h1 class="
              % (crumbs(('Документы', None)), ''.join('<a class="doc-item" href="{{base}}dokumenty/%s/" data-reveal><span class="ic">{{icon:file-text}}</span><b>%s</b>{{icon:arrow-right}}</a>'
                                                      % (d['slug'], esc(d['title'])) for d in DOCS)))
 
-PAGES_OUT = [
-    ('', page('home', '%s — рост продаж на Wildberries и Ozon' % COMPANY,
-              'Аналитика, реклама, дизайн карточек, SEO и сопровождение селлеров Wildberries и Ozon. Начните с бесплатной консультации.', home)),
-    ('uslugi/', page('uslugi', 'Услуги — %s' % COMPANY, 'Бизнес-трекер, реклама, дизайн и SEO карточек, фото и видео, работа с покупателями, подбор ниши.', fill(inner['uslugi'], ('Услуги', None)))),
-    ('sait/', page('sait', 'Сайт для селлера — %s' % COMPANY, 'Свой интернет-магазин для селлера Wildberries и Ozon: админ-панель, Метрика, доставка, оплата и заказы в Телеграм.', fill(inner['sait'], ('Сайт для селлера', None)))),
-    ('o-nas/', page('o-nas', 'О компании — %s' % COMPANY, (TX.get('o_nas') or {}).get('lead', ''), fill(inner['o-nas'], ('О компании', None)))),
-    ('voprosy/', page('voprosy', 'Частые вопросы — %s' % COMPANY, 'Ответы о работе с Wildberries и Ozon, оплате и рекламе.', fill(inner['voprosy'], ('Вопросы', None)), head=FAQ_LD)),
-    ('kontakty/', page('kontakty', 'Бесплатная консультация — %s' % COMPANY, 'Запишитесь на бесплатную онлайн-встречу с аналитиком маркетплейсов.', fill(inner['kontakty'], ('Контакты', None)), sticky=False, scripts=('voice', 'site'))),
-    ('novosti/', page('novosti', 'Новости — %s' % COMPANY, (TX.get('novosti') or {}).get('lead', ''), fill(inner['novosti'], ('Новости', None)))),
+PAGES_OUT = [(url, site_page(key)) for key, url, _, _ in PAGE_KEYS] + [
     ('dokumenty/', page('dokumenty', 'Документы — %s' % COMPANY, 'Оферта, политика обработки персональных данных и согласия.', fill(DOCS_LIST), sticky=False)),
 ] + [('uslugi/%s/' % s['slug'], page('uslugi', '%s — %s' % (s['title'], COMPANY), s.get('short', ''), fill(service_body(s)))) for s in SERVICES if s['slug'] != 'sait'] \
   + [('novosti/%s/' % n['slug'], page('novosti', '%s — %s' % (n['title'], COMPANY), n['excerpt'] or n['title'], fill(news_post(n)))) for n in NEWS] \
@@ -930,8 +1113,7 @@ for path, text in PAGES_OUT:
     (OUT / path).mkdir(parents=True, exist_ok=True)
     (OUT / path / 'index.html').write_text(text, encoding='utf-8')
 
-# ---------- конструктор: версия главной для редактора (с пометками полей и скрытыми блоками) и его данные ----------
-REV = os.environ.get('GITHUB_SHA') or 'local'  # какая версия репозитория собрана — конструктор сверяет её с последней правкой
+# ---------- конструктор: версии страниц для редактора (с пометками полей и скрытыми блоками) и их данные ----------
 def blob_sha(rel):
     """Отпечаток файла как в git: конструктор проверяет, не изменили ли файл в админке, пока он был открыт."""
     f = C / rel
@@ -941,19 +1123,20 @@ def blob_sha(rel):
     return hashlib.sha1(b'blob %d\x00' % len(b) + b).hexdigest()
 LIB = {t: tokens(fill(render_blocks(norm_blocks([{'id': 'zznewzz', 'type': t, 'data': BLOCK_DEFAULTS.get(t, {})}]), True))).replace(' — ', ' — ')
        for t in BLOCKS}  # заготовки для «Добавить блок»; zznewzz конструктор меняет на id нового блока
-EDIT_DATA = {
+EDIT_COMMON = {
     'rev': REV, 'ver': VER, 'repo': os.environ.get('GITHUB_REPOSITORY') or 'i78424325/doctor-marketplace-v2', 'branch': 'main',
-    'page': {'key': 'home', 'title': HOME_DOC.get('title') or 'Главная', 'url': BASE, 'file': 'content/site/home.json', 'sha': blob_sha('site/home.json')},
-    'doc': HOME_DOC,
+    'pages': [{'key': k, 'title': t, 'url': BASE + u} for k, u, _, t in PAGE_KEYS],
     'sources': {n: {'file': 'content/%s.json' % n, 'doc': (F if n == 'founder' else jload('%s.json' % n)) or {}, 'sha': blob_sha('%s.json' % n)}
                 for n in ('stats', 'founder', 'services', 'clients', 'steps', 'video')},
     'types': {t: {'name': v[0], 'about': v[1]} for t, v in BLOCKS.items()},
     'defaults': BLOCK_DEFAULTS, 'library': LIB, 'bg': BG,
 }
-(OUT / 'admin' / 'edit').mkdir(parents=True, exist_ok=True)
-(OUT / 'admin' / 'edit' / 'index.html').write_text(page('home', 'Конструктор — %s' % COMPANY, '', fill(render_blocks(HOME_DOC['blocks'], True)), noindex=True,
-                                                        head='<meta name="dm-rev" content="%s">' % esc(REV)), encoding='utf-8')
-(OUT / 'admin' / 'edit' / 'data.json').write_text(json.dumps(EDIT_DATA, ensure_ascii=False), encoding='utf-8')
+for _k, _u, _c, _t in PAGE_KEYS:  # admin/edit/<ключ>/ — страница для правки и её данные
+    _dir = OUT / 'admin' / 'edit' / _k
+    _dir.mkdir(parents=True, exist_ok=True)
+    (_dir / 'index.html').write_text(site_page(_k, True), encoding='utf-8')
+    (_dir / 'data.json').write_text(json.dumps(dict(EDIT_COMMON, doc=SITE_DOCS[_k], page={
+        'key': _k, 'title': _t, 'url': BASE + _u, 'file': 'content/site/%s.json' % _k, 'sha': blob_sha('site/%s.json' % _k)}), ensure_ascii=False), encoding='utf-8')
 (OUT / '404.html').write_text(page('404', 'Страница не найдена — %s' % COMPANY, 'Такой страницы нет.', fill(inner['404']), sticky=False), encoding='utf-8')
 brief = tokens((SRC / 'brief' / 'index.html').read_text(encoding='utf-8')).replace('{{css}}', CSS + CSS_BRIEF)
 (OUT / 'brief').mkdir()
