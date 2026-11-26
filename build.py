@@ -327,9 +327,10 @@ def icon(name, fallback='check-circle'):
     return '{{icon:%s}}' % (name if name in icons else fallback)
 
 # ---------- пометки для конструктора: только в версии страницы для редактора (admin/edit/), на сайте их нет ----------
-def ea(ed, name, fmt=None):
-    """Поле, которое правится прямо на странице: data-e — имя поля («.» — сам пункт списка), data-fmt — разметка ([WB], *акцент*)."""
-    return (' data-e="%s"%s' % (name, ' data-fmt="%s"' % fmt if fmt else '')) if ed else ''
+def ea(ed, name, fmt=None, fb=None):
+    """Поле, которое правится прямо на странице: data-e — имя поля («.» — сам пункт списка), data-fmt — разметка ([WB], *акцент*),
+    data-fb — что показывает сайт, пока поле пустое (конструктор показывает то же самое)."""
+    return (' data-e="%s"%s%s' % (name, ' data-fmt="%s"' % fmt if fmt else '', ' data-fb="%s"' % esc(fb) if fb else '')) if ed else ''
 
 def el(ed, name, fixed=False, src=None):
     """Список: data-list — поле-список; data-fixed — на странице правится только текст; data-src — общий файл (stats, founder…)."""
@@ -358,7 +359,7 @@ def bento_html(ed=False):
         out.append('<a class="tile tile-%s%s" href="%s" data-reveal style="--d:%dms"%s><div class="tile-copy"><h3%s>%s</h3><p%s>%s</p>%s</div>'
                    '<div class="viz" aria-hidden="true">%s</div><span class="tile-go" aria-hidden="true">{{icon:arrow-up-right}}</span></a>'
                    % (slug, size, url, (k % 4) * 70, ei(ed, s['_i']), ea(ed, 'title'), esc(s['title']),
-                      ea(ed, 'tile_text'), esc(s.get('tile_text') or s.get('short', '')),
+                      ea(ed, 'tile_text', fb=s.get('short', '')), esc(s.get('tile_text') or s.get('short', '')),
                       '' if slug == 'sait' and not price_value(s) else price_html(s), VIZ.get(slug, '')))
     return ''.join(out)
 
@@ -399,7 +400,7 @@ def tagline_words(text):
             i += 1
     return ' '.join(words)
 
-def clients_html(ed=False):
+def clients_html(ed=False, b=None):
     logos = [l for l in (CLIENTS.get('logos') or []) if l.get('image')]
     if logos:
         def one(l):
@@ -410,9 +411,10 @@ def clients_html(ed=False):
             items += ''.join(one(l) for l in logos)
     else:  # логотипов пока нет — аккуратные места под них, чтобы было видно, как работает строка
         items = ''.join('<li class="ph">{{icon:image}}<span>Логотип клиента</span></li>' for _ in range(7))
-    return ('<section class="clients" aria-labelledby="cl-h"><div class="wrap clients-head"><h2 class="clients-h" id="cl-h"%s>%s</h2></div>'
+    h_id = hid(b, 'cl-h') if b else 'cl-h'  # у копии блока свой id заголовка
+    return ('<section class="clients" aria-labelledby="%s"><div class="wrap clients-head"><h2 class="clients-h" id="%s"%s>%s</h2></div>'
             '<div class="marquee"><div class="marquee-in"><ul>%s</ul><ul aria-hidden="true">%s</ul></div></div></section>'
-            % (es(ed, 'clients') + ea(ed, 'title'), esc(CLIENTS.get('title') or 'Наши клиенты'), items, items))
+            % (h_id, h_id, es(ed, 'clients') + ea(ed, 'title', fb='Наши клиенты'), esc(CLIENTS.get('title') or 'Наши клиенты'), items, items))
 
 def who_html(cards, ed=False):
     out = []
@@ -432,7 +434,7 @@ def founder_html(cta, ed=False):
             '<h2 class="heading-2" style="margin-top:16px"%s>%s</h2><p class="lead" style="margin-top:8px"%s>%s</p><ul class="checks"%s>%s</ul>'
             '<div class="hero-cta">%s</div></div></div>'
             % (es(ed, 'founder'), esc(photo), esc('%s — %s' % (F.get('name', ''), F.get('role', ''))), ea(ed, 'photo') + (' data-img' if ed else ''),
-               ea(ed, 'chip'), esc(F.get('chip') or 'Кто ведёт ваш магазин'), ea(ed, 'name'), esc(F.get('name', '')), ea(ed, 'role'), esc(F.get('role', '')),
+               ea(ed, 'chip', fb='Кто ведёт ваш магазин'), esc(F.get('chip') or 'Кто ведёт ваш магазин'), ea(ed, 'name'), esc(F.get('name', '')), ea(ed, 'role'), esc(F.get('role', '')),
                el(ed, 'items'), ''.join('<li%s>{{icon:seal-check}}<span%s>%s</span></li>' % (ei(ed), ea(ed, '.'), esc(t)) for t in F.get('items') or []), cta))
 
 def news_cards(items):
@@ -465,7 +467,7 @@ def video_card(ed=False):
     bg = ('<img class="vc-poster" src="%s" alt="" decoding="async" fetchpriority="high">' % esc(media(poster))) if poster else \
          ('<span class="vc-rings" aria-hidden="true"></span><span class="vc-face"><img src="%s" alt="" width="336" height="336" decoding="async"%s></span>'
           % (esc(face), es(ed, 'founder') + ea(ed, 'photo') + (' data-img' if ed else '')))
-    body = '%s<span class="vplay" aria-hidden="true"><i></i>{{icon:play}}</span><span class="vcap"><b%s>%s</b><span>%s</span></span>' % (bg, es(ed, 'video') + ea(ed, 'caption'), cap, who)
+    body = '%s<span class="vplay" aria-hidden="true"><i></i>{{icon:play}}</span><span class="vcap"><b%s>%s</b><span>%s</span></span>' % (bg, es(ed, 'video') + ea(ed, 'caption', fb=S.get('video_caption') or 'Видео-визитка основателя'), cap, who)
     if url:
         return ('<button class="vcard%s" type="button" data-video aria-label="Смотреть: %s">%s</button><template id="video-tpl">%s</template>'
                 % (' has-poster' if poster else '', cap, body, video_html(url, poster, autoplay=True)))
@@ -507,8 +509,9 @@ def cta_band(title=None, text=None, button=None, ed=False):
     return ('<section class="sec" aria-label="Бесплатная консультация"><div class="wrap"><div class="cta-band" data-reveal>'
             '<div><h2 class="heading-3"%s>%s</h2><p%s>%s</p></div>'
             '<div class="hero-cta"><a class="btn btn-primary btn-lg btn-shine" href="{{base}}kontakty/" data-lead><span%s>%s</span>{{icon:arrow-right}}</a></div></div></div></section>'
-            % (ea(ed, 'title'), esc(title or t.get('title') or 'Начните с бесплатной консультации'), ea(ed, 'text'), esc(text or t.get('text') or ''),
-               ea(ed, 'button'), esc(button or t.get('button') or 'Записаться')))
+            % (ea(ed, 'title', fb=t.get('title') or 'Начните с бесплатной консультации'), esc(title or t.get('title') or 'Начните с бесплатной консультации'),
+               ea(ed, 'text', fb=t.get('text') or ''), esc(text or t.get('text') or ''),
+               ea(ed, 'button', fb=t.get('button') or 'Записаться'), esc(button or t.get('button') or 'Записаться')))
 
 OPTIONS = '<option value="">Пока не знаю</option>' + ''.join('<option value="%s">%s</option>' % (s['slug'], esc(s['title'])) for s in SERVICES)
 
@@ -589,7 +592,8 @@ def hid(b, base):
 def head_html(b, d, ed, h_id, chip_default='', title_default='', link=None):
     """Шапка секции: чип и заголовок; link — ссылка справа («Все услуги»)."""
     head = '<div class="sec-head"%s><span class="chip"%s>%s</span><h2 class="heading-2" id="%s"%s>%s</h2></div>' % (
-        '' if link else ' data-reveal', ea(ed, 'chip'), esc(d.get('chip') or chip_default), hid(b, h_id), ea(ed, 'title'), esc(d.get('title') or title_default))
+        '' if link else ' data-reveal', ea(ed, 'chip', fb=chip_default), esc(d.get('chip') or chip_default), hid(b, h_id),
+        ea(ed, 'title', fb=title_default), esc(d.get('title') or title_default))
     if link:
         return '<div class="sec-head-row" data-reveal>%s<a class="link-arrow" href="%s"><span>%s</span>{{icon:arrow-right}}</a></div>' % (head, link[0], link[1])
     return head
@@ -604,7 +608,8 @@ def blk_hero(b, d, ed):
             '<a class="link-arrow" href="{{base}}uslugi/"><span>Все услуги</span>{{icon:arrow-right}}</a></div>'
             '<div class="trust hi-in" style="--d:240ms"%s>%s</div></div><div class="hero-art hi-in" style="--d:140ms">%s</div></div></section>'
             % (hid(b, 'hero-h'), chip, hid(b, 'hero-h'), ea(ed, 'title', 'hero'), hero_title(d.get('title')), ea(ed, 'lead'), esc(d.get('lead', '')),
-               ea(ed, 'button'), esc(d.get('button') or 'Получить бесплатную консультацию'), el(ed, 'items', True, 'stats'), hero_stats(ed), video_card(ed)))
+               ea(ed, 'button', fb='Получить бесплатную консультацию'), esc(d.get('button') or 'Получить бесплатную консультацию'),
+               el(ed, 'items', True, 'stats'), hero_stats(ed), video_card(ed)))
 
 def blk_who(b, d, ed):
     return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="who"%s>%s</div></div></section>'
@@ -645,7 +650,7 @@ def blk_cta(b, d, ed):
 
 BLOCKS = {  # тип → (название в конструкторе, что внутри, сборка)
     'hero': ('Первый экран', 'Заголовок, кнопка записи, видео-визитка', blk_hero),
-    'clients': ('Наши клиенты', 'Бегущая строка с логотипами', lambda b, d, ed: clients_html(ed)),
+    'clients': ('Наши клиенты', 'Бегущая строка с логотипами', lambda b, d, ed: clients_html(ed, b)),
     'who': ('Это про вас?', 'Карточки «кому поможем» со списками', blk_who),
     'services': ('Услуги', 'Плитки услуг с ценами', blk_services),
     'stats': ('Цифры', 'Опыт в цифрах', blk_stats),

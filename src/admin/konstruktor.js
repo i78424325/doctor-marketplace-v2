@@ -19,6 +19,8 @@
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const clone = o => (o === undefined ? undefined : JSON.parse(JSON.stringify(o)));
   const clean = s => String(s == null ? '' : s).replace(/ /g, ' ').replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim();
+  const decoder = document.createElement('textarea');
+  const decode = s => { decoder.innerHTML = String(s); return decoder.value; }; // «6&nbsp;000+» в файле → «6 000+» на экране, как у сборщика
   const b64 = text => {
     const b = new TextEncoder().encode(text);
     let s = '';
@@ -93,7 +95,7 @@
 
   const S = {
     data: null, doc: null, src: {}, sha: {}, rev: 'local', dirty: new Set(), kinds: new Set(), uploads: {},
-    sel: null, hover: null, hoverItem: null, editing: null, editLoc: null, editStart: undefined,
+    sel: null, hover: null, hoverItem: null, editing: null, editStart: undefined, editHTML: '', editDirty: null, editKinds: null,
     undo: [], redo: [], fw: null, fd: null, busy: false, watch: 0, note: '', noteCls: '', panelMode: null, libAfter: null, pickFor: null,
     raf: 0, dt: 0, tt: 0, tbFor: null, itFor: null
   };
@@ -182,6 +184,17 @@
     }
     S.fw = ui.frame.contentWindow;
     S.fd = d;
+    const mrev = $('meta[name="dm-rev"]', d); // страница и данные должны быть из одной выкладки сайта
+    if (mrev && mrev.content !== S.rev) {
+      let last = 0;
+      try { last = +sessionStorage.getItem('dm-k-reload') || 0; } catch (e) { /* без памяти вкладки */ }
+      if (Date.now() - last > 60000) {
+        try { sessionStorage.setItem('dm-k-reload', String(Date.now())); } catch (e) { /* без памяти вкладки */ }
+        location.reload();
+        return;
+      }
+      setNote('Сайт сейчас обновляется — через минуту обновите эту страницу', 'warn');
+    }
     d.documentElement.classList.add('dm-edit');
     const css = d.createElement('link');
     css.rel = 'stylesheet';
@@ -224,7 +237,6 @@
       '<button type="button" id="dm-add">' + svg('plus', 16) + '<span>Добавить блок</span></button>' +
       '<div id="dm-tip" role="note"></div><input type="file" id="dm-file" accept="image/*" hidden>';
     d.body.appendChild(ov);
-    ov.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); }); // фокус остаётся в тексте
     ov.addEventListener('click', onOverlay);
     $('#dm-file', d).addEventListener('change', onFile);
   }
@@ -291,40 +303,75 @@
   const fieldOf = t => (t && t.closest ? t.closest('[data-e]:not([data-img])') : null);
   function show(el, v) {
     if (el.hasAttribute('data-img')) { el.src = imgSrc(v); return; }
+    const val = v == null || v === '' ? (el.getAttribute('data-fb') || '') : String(v); // пустое поле — как на сайте, текст по умолчанию
     const f = el.getAttribute('data-fmt');
-    if (f && FMT[f]) el.innerHTML = FMT[f](v == null ? '' : v);
-    else el.textContent = v == null ? '' : String(v);
+    if (f && FMT[f]) el.innerHTML = FMT[f](val);
+    else el.textContent = decode(val);
+  }
+  const REQUIRED = { services: /^services\/\d+\/title$/, stats: /^items\/\d+\/value$/ }; // без них сборщик убирает услугу или цифру с сайта
+  const required = loc => !!(loc && loc.src && REQUIRED[loc.src] && REQUIRED[loc.src].test(loc.path.join('/')));
+  function caretEnd(el) {
+    const sel = S.fw && S.fw.getSelection();
+    if (!sel) return;
+    const r = S.fd.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
   }
   function twins(el, loc, v) { // то же поле в другом месте страницы (цифры в первом экране и в блоке «Цифры», фото основателя)
     const k = keyOf(loc);
     $$('[data-e]', S.fd).forEach(o => { if (o !== el && keyOf(locate(o)) === k) show(o, v); });
   }
+  /* место поля в данных ищется заново при каждом нажатии: пункты могли переставить или удалить, пока курсор стоял в поле */
   function onFocusIn(e) {
     const el = fieldOf(e.target);
     if (!el) return;
     S.editing = el;
-    S.editLoc = locate(el);
-    S.editStart = clone(getAt(S.editLoc));
-    if (el.hasAttribute('data-fmt')) el.textContent = S.editStart == null ? '' : String(S.editStart); // разметка видна, пока пишешь
+    S.editStart = clone(getAt(locate(el)));
+    S.editHTML = el.innerHTML;
+    S.editDirty = new Set(S.dirty);
+    S.editKinds = new Set(S.kinds);
+    if (el.hasAttribute('data-fmt')) { // разметка видна, пока пишешь; курсор — в конец
+      el.textContent = S.editStart == null ? '' : String(S.editStart);
+      setTimeout(() => { if (S.editing === el) caretEnd(el); }, 0);
+    }
     select(el.closest('[data-blk]'));
     tip(el);
   }
   function onInput(e) {
     const el = fieldOf(e.target);
-    if (!el || el !== S.editing || !S.editLoc) return;
+    if (!el || el !== S.editing) return;
+    const loc = locate(el);
+    if (!loc) return;
     const v = clean(el.textContent);
-    setAt(S.editLoc, v);
+    setAt(loc, v);
     S.kinds.add('тексты');
-    twins(el, S.editLoc, v);
+    twins(el, loc, v);
   }
   function onFocusOut(e) {
     const el = fieldOf(e.target);
     if (!el || el !== S.editing) return;
-    const v = getAt(S.editLoc);
-    show(el, v);
     S.editing = null;
     tip(null);
-    if (JSON.stringify(v) !== JSON.stringify(S.editStart)) pushUndo();
+    const loc = locate(el);
+    let v = getAt(loc);
+    if (required(loc) && !clean(v)) {
+      setAt(loc, clone(S.editStart));
+      v = S.editStart;
+      twins(el, loc, v);
+      toast('Это поле не может быть пустым — без него пункт пропадёт с сайта. Вернул прежний текст', { err: true });
+    }
+    if (JSON.stringify(v) === JSON.stringify(S.editStart)) { // ничего не поменяли — всё как было, без лишней правки
+      el.innerHTML = S.editHTML;
+      S.dirty = S.editDirty;
+      S.kinds = S.editKinds;
+      saveDraft();
+      updateStatus();
+      return;
+    }
+    show(el, v);
+    pushUndo();
   }
   function onKey(e) {
     const el = fieldOf(e.target);
@@ -332,7 +379,8 @@
       if (e.key === 'Enter') { e.preventDefault(); el.blur(); return; }
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (S.editLoc) { setAt(S.editLoc, clone(S.editStart)); twins(el, S.editLoc, S.editStart); }
+        const loc = locate(el);
+        if (loc && JSON.stringify(getAt(loc)) !== JSON.stringify(S.editStart)) { setAt(loc, clone(S.editStart)); twins(el, loc, S.editStart); }
         el.blur();
         return;
       }
@@ -453,6 +501,7 @@
     if (!btn) return;
     e.preventDefault();
     e.stopPropagation();
+    if (S.editing) S.editing.blur(); // сначала закончить правку текста, потом менять блоки и пункты
     const blk = S.tbFor && S.tbFor.isConnected ? S.tbFor : (S.hover && S.hover.isConnected ? S.hover : S.sel);
     if (btn.id === 'dm-add') { openLibrary(blk); return; }
     const act = btn.getAttribute('data-act');
@@ -554,6 +603,7 @@
       S.doc.blocks.push(m);
     }
     prepare(el);
+    syncShared(el); // заготовка собрана при выкладке сайта — показываем общие данные такими, какие они сейчас
     S.panelMode = null;
     S.libAfter = null;
     changed('блоки');
@@ -564,32 +614,48 @@
 
   /* ---------- пункты списков (карточки «Это про вас?», пункты списков) ---------- */
   function itemOp(op, item) {
+    if (S.editing) S.editing.blur();
     if (!item || !item.isConnected) return;
     const list = item.parentElement;
     if (!editableList(list)) return;
     const loc = locate(list, false), arr = getAt(loc);
     if (!Array.isArray(arr)) return;
     const items = $$(':scope > [data-item]', list), i = items.indexOf(item);
-    if (i < 0) return;
-    if (op === 'up' || op === 'down') {
-      const j = op === 'up' ? i - 1 : i + 1;
-      if (j < 0 || j >= items.length) return;
-      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
-      if (op === 'up') list.insertBefore(item, items[j]); else list.insertBefore(item, items[j].nextSibling);
-    } else if (op === 'copy') {
-      arr.splice(i + 1, 0, clone(arr[i]));
-      const c = item.cloneNode(true);
-      c.classList.remove('dm-ihover');
-      list.insertBefore(c, item.nextSibling);
-    } else if (op === 'del') {
-      if (items.length <= 1) { toast('Последний пункт не удалить — просто измените его текст'); return; }
-      arr.splice(i, 1);
-      item.remove();
-      setItem(null);
-    } else return;
+    if (i < 0 || ['up', 'down', 'copy', 'del'].indexOf(op) < 0) return;
+    if (op === 'del' && items.length <= 1) { toast('Последний пункт не удалить — просто измените его текст'); return; }
+    const j = op === 'up' ? i - 1 : op === 'down' ? i + 1 : i;
+    if (j < 0 || j >= items.length) return;
+    if (op === 'up' || op === 'down') { const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp; }
+    else if (op === 'copy') arr.splice(i + 1, 0, clone(arr[i]));
+    else arr.splice(i, 1);
+    // тот же общий список может стоять в другом блоке (копия «Основателя») — меняем его так же, чтобы номера пунктов совпадали
+    const key = keyOf(loc);
+    const lists = loc.src ? $$('[data-list]', S.fd).filter(l => l === list || (editableList(l) && keyOf(locate(l, false)) === key)) : [list];
+    lists.forEach(l => domItemOp(l, op, i, j));
+    if (op === 'del') setItem(null);
     touch(scopeOf(loc), 'тексты');
     pushUndo();
     schedule();
+  }
+  function domItemOp(list, op, i, j) {
+    const items = $$(':scope > [data-item]', list), a = items[i];
+    if (!a) return;
+    if (op === 'up') list.insertBefore(a, items[j]);
+    else if (op === 'down') list.insertBefore(a, items[j].nextSibling);
+    else if (op === 'copy') { const c = a.cloneNode(true); c.classList.remove('dm-ihover'); list.insertBefore(c, a.nextSibling); }
+    else a.remove();
+  }
+  function syncShared(root) { // общие данные (цифры, основатель, услуги…) в блоке — как они сейчас, с правками этого сеанса
+    $$('[data-list]', root).forEach(l => {
+      const loc = locate(l, false);
+      if (!loc || !loc.src || l.hasAttribute('data-fixed')) return;
+      const arr = getAt(loc);
+      if (!Array.isArray(arr)) return;
+      const items = $$(':scope > [data-item]', l);
+      while (items.length > Math.max(arr.length, 1)) items.pop().remove();
+      while (items.length && items.length < arr.length) { const c = items[items.length - 1].cloneNode(true); l.appendChild(c); items.push(c); }
+    });
+    $$('[data-e]', root).forEach(el => { const loc = locate(el); if (loc && loc.src) show(el, getAt(loc)); });
   }
 
   /* ---------- оформление блока ---------- */
@@ -711,6 +777,7 @@
     p.addEventListener('click', e => {
       const b = e.target.closest('button');
       if (!b) return;
+      if (S.editing) S.editing.blur();
       if (b.dataset.reset) { setStyle(b.dataset.reset, '', true); return; }
       if (b.hasAttribute('data-bg')) { setStyle('bg', b.getAttribute('data-bg'), true); return; }
       if (b.hasAttribute('data-show')) { setStyle('show', b.getAttribute('data-show'), true); return; }
@@ -782,20 +849,43 @@
   }
 
   /* ---------- черновик в этом браузере ---------- */
+  const refOf = v => JSON.stringify(v).slice(1, -1); // как путь к фото выглядит внутри JSON
+  function pruneUploads() { // фото, на которые больше ничто не ссылается (и отмена к ним не вернёт), из памяти убираем
+    const all = [JSON.stringify(S.doc)].concat(Object.keys(S.src).map(n => JSON.stringify(S.src[n].doc)), S.undo.map(s => s.doc + s.src), S.redo.map(s => s.doc + s.src)).join('');
+    Object.keys(S.uploads).forEach(v => { if (all.indexOf(refOf(v)) === -1) delete S.uploads[v]; });
+  }
   function draftObj() {
     let html = $('main', S.fd).innerHTML;
     Object.keys(S.uploads).forEach(v => { html = html.split(S.uploads[v].url).join('dm-upload:' + v); });
     const src = {};
     Object.keys(S.src).forEach(n => { src[n] = S.src[n].doc; });
-    return { v: 1, rev: S.rev, t: Date.now(), doc: S.doc, src, dirty: Array.from(S.dirty), kinds: Array.from(S.kinds), html, uploads: S.uploads };
+    // отпечатки файлов на момент черновика: если их потом изменят в админке, публикация черновика это заметит
+    return { v: 2, rev: S.rev, t: Date.now(), doc: S.doc, src, sha: Object.assign({}, S.sha), dirty: Array.from(S.dirty), kinds: Array.from(S.kinds), html, uploads: S.uploads };
   }
   function saveDraftNow() {
     if (!S.fd) return;
     if (!S.dirty.size) { LS.del(DRAFT); return; }
+    pruneUploads();
     const d = draftObj();
     if (LS.set(DRAFT, JSON.stringify(d))) return;
-    d.uploads = {}; // фото не влезли — сохраняем хотя бы тексты
+    d.dropped = Object.keys(S.uploads).filter(v => !S.uploads[v].done); // фото не влезли: при возврате черновика их ссылки снимем
+    d.uploads = {};
     if (!LS.set(DRAFT, JSON.stringify(d))) toast('Черновик не помещается в память браузера — опубликуйте правки, чтобы не потерять их', { err: true });
+  }
+  function dropRefs(o, value) { // ссылки на потерянное фото → пусто (на сайте будет фото по умолчанию)
+    if (Array.isArray(o)) { o.forEach((x, i) => { if (x === value) o[i] = ''; else if (x && typeof x === 'object') dropRefs(x, value); }); return; }
+    if (o && typeof o === 'object') Object.keys(o).forEach(k => { if (o[k] === value) o[k] = ''; else if (o[k] && typeof o[k] === 'object') dropRefs(o[k], value); });
+  }
+  function putHtml(html) { // черновик хранится в браузере — без скриптов и обработчиков событий, только разметка страницы
+    const t = S.fd.createElement('template');
+    t.innerHTML = html;
+    $$('script', t.content).forEach(s => s.remove());
+    $$('*', t.content).forEach(n => Array.from(n.attributes).forEach(a => {
+      if (/^on/i.test(a.name) || (/^(href|src|action|formaction|xlink:href)$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) n.removeAttribute(a.name);
+    }));
+    const main = $('main', S.fd);
+    main.textContent = '';
+    main.appendChild(t.content);
   }
   function saveDraft() { clearTimeout(S.dt); S.dt = setTimeout(saveDraftNow, 500); }
   function restoreDraftOffer() {
@@ -806,17 +896,31 @@
     if (!d || !d.doc || typeof d.html !== 'string') { LS.del(DRAFT); return; }
     const when = new Date(d.t).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
     modal('<h2>Есть неопубликованные правки</h2><p>Черновик от ' + esc(when) + '. Вернуть его на страницу?</p>' +
-      (d.rev !== S.rev ? '<p class="pwarn" style="margin:0">С тех пор сайт меняли. Если вернуть черновик и опубликовать, он заменит те изменения на этой странице.</p>' : ''),
+      (d.rev !== S.rev ? '<p class="pwarn" style="margin:0">С тех пор сайт меняли. Если те же данные успели изменить в админке, при публикации конструктор предупредит.</p>' : ''),
       [['Вернуть черновик', () => applyDraft(d), 'primary'], ['Удалить черновик', () => LS.del(DRAFT)]]);
   }
   function applyDraft(d) {
-    S.doc = d.doc;
-    Object.keys(d.src || {}).forEach(n => { if (S.src[n]) S.src[n].doc = d.src[n]; });
+    const dirty = new Set(d.dirty && d.dirty.length ? d.dirty : ['page']);
+    const shas = d.sha || {};
+    // возвращаем только то, что в черновике правили; отпечатки — тех времён, чтобы проверка нашла чужие правки, сделанные с тех пор
+    if (dirty.has('page')) {
+      S.doc = d.doc;
+      S.sha[S.data.page.file] = shas[S.data.page.file] !== undefined ? shas[S.data.page.file] : S.sha[S.data.page.file];
+    }
+    Object.keys(d.src || {}).forEach(n => {
+      if (!S.src[n] || !dirty.has('src:' + n)) return;
+      S.src[n].doc = d.src[n];
+      if (shas[S.src[n].file] !== undefined) S.sha[S.src[n].file] = shas[S.src[n].file];
+    });
     S.uploads = d.uploads || {};
-    let html = d.html;
-    Object.keys(S.uploads).forEach(v => { html = html.split('dm-upload:' + v).join(S.uploads[v].url); });
-    $('main', S.fd).innerHTML = html;
-    S.dirty = new Set(d.dirty && d.dirty.length ? d.dirty : ['page']);
+    (d.dropped || []).forEach(v => { dropRefs(S.doc, v); Object.keys(S.src).forEach(n => dropRefs(S.src[n].doc, v)); });
+    if (dirty.has('page')) {
+      let html = d.html;
+      Object.keys(S.uploads).forEach(v => { html = html.split('dm-upload:' + v).join(S.uploads[v].url); });
+      putHtml(html.replace(/dm-upload:[^"' )]*/g, ''));
+    }
+    syncShared($('main', S.fd)); // общие данные — из файлов, а не из старой разметки черновика
+    S.dirty = dirty;
     S.kinds = new Set(d.kinds || []);
     S.sel = null;
     S.hover = null;
@@ -825,7 +929,8 @@
     updateStatus();
     renderPanel();
     schedule();
-    toast('Черновик вернулся на страницу');
+    toast(d.dropped && d.dropped.length ? 'Черновик вернулся, но новое фото не поместилось в память браузера — загрузите его ещё раз' : 'Черновик вернулся на страницу',
+      d.dropped && d.dropped.length ? { err: true } : undefined);
   }
 
   /* ---------- фото ---------- */
@@ -940,7 +1045,13 @@
     if (status === 403 || /permission|not accessible|resource not accessible/i.test(m)) return 'У ключа входа нет права сохранять правки (нужно Contents: Read and write).';
     return 'GitHub не принял правку' + (m ? ': ' + m : '') + '.';
   }
-  async function publish() {
+  function conflictModal(bad) {
+    modal('<h2>Эти данные успели изменить</h2><p>Пока вы правили, в админке поменяли: <b>' + esc(bad.map(p => NICE[p] || p).join(', ')) + '</b>.</p>' +
+      '<p>Можно обновить страницу и внести свои правки заново — или опубликовать поверх: тогда изменения из админки в этих данных пропадут.</p>',
+      [['Обновить страницу', () => { LS.del(DRAFT); S.dirty.clear(); location.reload(); }, 'primary'], ['Опубликовать поверх', () => publish(true)], ['Отмена']]);
+  }
+  async function publish(force) {
+    if (force !== true) force = false; // при нажатии на кнопку сюда приходит событие
     if (S.busy || !S.dirty.size || !S.fd) return;
     if (S.editing) S.editing.blur();
     const t = token();
@@ -964,9 +1075,9 @@
       const files = collect();
       if (!files.length) { S.dirty.clear(); toast('Нечего публиковать'); return; }
       const head = await headOid(t);
-      if (head !== S.rev) {
+      if (!force) { // проверяем всегда: файл могли изменить в админке и до прошлой публикации из конструктора
         const bad = await conflicts(t, head, files);
-        if (bad.length) throw new Error('Пока вы правили, в админке изменили: ' + bad.map(p => NICE[p] || p).join(', ') + '. Обновите страницу конструктора — черновик сохранится — и проверьте правки.');
+        if (bad.length) { conflictModal(bad); return; }
       }
       const kinds = Array.from(S.kinds);
       const req = {
