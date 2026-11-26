@@ -72,6 +72,16 @@
       "style": {}
     },
     {
+      "id": "cases-feed",
+      "type": "cases-feed",
+      "data": {
+        "chip": "Кейсы",
+        "title": "Результаты наших клиентов",
+        "count": 3
+      },
+      "style": {}
+    },
+    {
       "id": "stats",
       "type": "stats",
       "data": {},

@@ -1,0 +1,27 @@
+{
+  "title": "Кейсы",
+  "blocks": [
+    {
+      "id": "phero",
+      "type": "phero",
+      "data": {
+        "chip": "Кейсы",
+        "title": "Результаты наших клиентов",
+        "lead": "Графики продаж на Wildberries и Ozon, цифры до и после и что мы сделали для каждого магазина."
+      },
+      "style": {}
+    },
+    {
+      "id": "cases-list",
+      "type": "cases-list",
+      "data": {},
+      "style": {}
+    },
+    {
+      "id": "cta",
+      "type": "cta",
+      "data": {},
+      "style": {}
+    }
+  ]
+}

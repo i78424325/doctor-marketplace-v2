@@ -60,7 +60,7 @@ singletons:
           - name: cases
             label: 'Кейсы'
             label_singular: 'кейс'
-            hint: 'Видны на странице этой услуги, в блоке «Кейсы». Новый — кнопкой «Добавить кейс»'
+            hint: 'Простые кейсы без графика — только на странице этой услуги. Кейсы с графиками продаж Wildberries и Ozon — в разделе «Кейсы» слева'
             widget: list
             required: false
             collapsed: true
@@ -219,6 +219,81 @@ singletons:
       - { name: cta, label: 'Призыв записаться', hint: 'Заголовки и тексты страниц теперь правятся в конструкторе (зелёная кнопка внизу слева). Здесь — общая плашка «Начните с бесплатной консультации»: её показывают страницы услуг, новости и блоки без своего текста.', widget: object, fields: [{ name: title, label: 'Заголовок', widget: string }, { name: text, label: 'Текст', widget: text }, { name: button, label: 'Текст кнопки', widget: string }] }
 
 collections:
+  - name: cases
+    label: 'Кейсы'
+    label_singular: 'кейс'
+    description: 'Кейсы с графиками продаж на Wildberries и Ozon. Нажмите «Создать»: площадки, услуги, главные цифры, точки графика по месяцам, «было → стало», скриншоты. Кейс появится на странице «Кейсы», на главной и на страницах отмеченных услуг.'
+    icon: trending_up
+    folder: content/cases
+    format: json
+    extension: json
+    create: true
+    delete: true
+    slug: '{{year}}-{{month}}-{{day}}-{{slug}}'
+    summary: '{{date}} · {{title}}'
+    sortable_fields: [date, title]
+    fields:
+      - { name: title, label: 'Заголовок кейса', widget: string, hint: 'Например: Посуда на Wildberries: выручка ×4 за 3 месяца' }
+      - { name: date, label: 'Дата', widget: datetime, format: 'YYYY-MM-DD', date_format: 'DD.MM.YYYY', time_format: false, hint: 'Новые кейсы показываются первыми' }
+      - { name: marketplaces, label: 'Площадки', widget: select, multiple: true, options: [{ label: 'Wildberries', value: wb }, { label: 'Ozon', value: ozon }] }
+      - { name: services, label: 'Услуги в этом кейсе', widget: select, multiple: true, required: false, options: '{{service_options}}', hint: 'Кейс появится и на страницах этих услуг' }  # список услуг подставляет build.py
+      - { name: niche, label: 'Ниша', widget: string, required: false, hint: 'Например: товары для дома' }
+      - { name: period, label: 'Срок работы', widget: string, required: false, hint: 'Например: 3 месяца' }
+      - { name: excerpt, label: 'Коротко', widget: text, required: false, hint: 'Одно-два предложения: с чем пришёл магазин и что получил. Видно под заголовком кейса' }
+      - name: results
+        label: 'Главные цифры'
+        label_singular: 'цифру'
+        hint: 'Первая цифра видна на карточке кейса'
+        widget: list
+        required: false
+        summary: '{{fields.value}} {{fields.label}}'
+        fields:
+          - { name: value, label: 'Цифра', widget: string, hint: 'Например: ×4 или +240%' }
+          - { name: label, label: 'Подпись', widget: string, required: false, hint: 'Например: выручка за 3 месяца' }
+      - name: chart
+        label: 'График продаж'
+        widget: object
+        required: false
+        hint: 'Точки по месяцам: сколько продали на Wildberries и на Ozon. Площадка одна — второе поле оставьте пустым. Нужно хотя бы два месяца'
+        fields:
+          - { name: title, label: 'Подпись графика', widget: string, required: false, default: 'Выручка в месяц, ₽', hint: 'Что на графике: выручка, заказы, штуки' }
+          - name: points
+            label: 'Месяцы'
+            label_singular: 'месяц'
+            widget: list
+            required: false
+            summary: '{{fields.label}}: WB {{fields.wb}} · Ozon {{fields.ozon}}'
+            fields:
+              - { name: label, label: 'Месяц', widget: string, hint: 'Например: Янв или Январь 2026' }
+              - { name: wb, label: 'Wildberries', widget: number, value_type: float, min: 0, required: false, hint: 'Только число, без пробелов и ₽: 1250000' }
+              - { name: ozon, label: 'Ozon', widget: number, value_type: float, min: 0, required: false, hint: 'Только число, без пробелов и ₽' }
+              - { name: start, label: 'В этом месяце начали работу', widget: boolean, required: false, default: false, hint: 'На графике появится отметка, месяцы до неё — «до нас»' }
+      - name: metrics
+        label: 'Было → стало'
+        label_singular: 'показатель'
+        widget: list
+        required: false
+        summary: '{{fields.label}}: {{fields.before}} → {{fields.after}}'
+        fields:
+          - { name: label, label: 'Показатель', widget: string, hint: 'Например: Выручка в месяц, ДРР, Позиция в поиске' }
+          - { name: before, label: 'Было', widget: string, hint: 'Например: 300 000 ₽' }
+          - { name: after, label: 'Стало', widget: string, hint: 'Например: 1 200 000 ₽' }
+          - { name: change, label: 'Изменение (необязательно)', widget: string, required: false, hint: 'Пусто — посчитается само: ×4 или +40%. Для ДРР или позиции лучше написать своими словами' }
+      - { name: text, label: 'Что сделали', widget: richtext, required: false }
+      - { name: cover, label: 'Обложка (необязательно)', widget: image, required: false, hint: 'Фото товара или магазина — вверху страницы кейса' }
+      - name: screenshots
+        label: 'Скриншоты из кабинета'
+        label_singular: 'скриншот'
+        widget: list
+        required: false
+        summary: '{{fields.caption}}'
+        fields:
+          - { name: image, label: 'Скриншот', widget: image }
+          - { name: caption, label: 'Подпись', widget: string, required: false }
+      - { name: video, label: 'Видео (необязательно)', widget: file, required: false, hint: 'Ссылка VK Видео, Rutube, YouTube или файл mp4' }
+      - { name: url, label: 'Адрес латиницей (необязательно)', widget: string, required: false, hint: 'Пусто — адрес сделается из заголовка' }
+      - { name: hidden, label: 'Скрыть с сайта', widget: boolean, required: false, default: false }
+
   - name: news
     label: 'Новости и статьи'
     label_singular: 'новость или статью'

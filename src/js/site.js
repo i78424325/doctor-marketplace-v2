@@ -426,15 +426,16 @@
     }, 2500);
   }
 
-  /* ---------- новости и статьи: фильтр «Все / Новости / Статьи / рубрики» ---------- */
+  /* ---------- фильтр карточек: новости и статьи («Все / Новости / Статьи / рубрики»), кейсы (площадки, услуги) ----------
+     у карточки data-fi и data-<ключ>="|значение|значение|"; кнопка data-nf="ключ:значение" */
   $$('.nfilter').forEach(function (bar) {
-    var cards = $$('[data-kind]', bar.parentNode);
+    var cards = $$('[data-fi]', bar.parentNode);
     bar.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-nf]');
       if (!b) return;
       var f = b.getAttribute('data-nf'), at = f.indexOf(':'), key = at > 0 ? f.slice(0, at) : '', val = at > 0 ? f.slice(at + 1) : '';
       $$('[data-nf]', bar).forEach(function (x) { var on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', String(on)); });
-      cards.forEach(function (c) { c.hidden = !!key && c.getAttribute('data-' + key) !== val; });
+      cards.forEach(function (c) { c.hidden = !!key && (c.getAttribute('data-' + key) || '').indexOf('|' + val + '|') < 0; });
     });
   });
 

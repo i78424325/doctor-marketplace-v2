@@ -4,7 +4,7 @@ content/ — всё, что правится в админке /admin: конт�
 src/     — шаблоны, стили, скрипты и иконки. Результат — site/ (готовые страницы для GitHub Pages или любого хостинга).
 Стили и иконки вшиваются в каждую страницу, поэтому на старте нет лишних запросов. Только стандартная библиотека Python 3.9+.
 Адрес сайта: переменные окружения SITE_BASE и SITE_URL (по умолчанию копия на GitHub Pages; для своего домена SITE_BASE=/)."""
-import hashlib, html, json, os, pathlib, re, shutil, sys, time, unicodedata, urllib.parse
+import hashlib, html, json, math, os, pathlib, re, shutil, sys, time, unicodedata, urllib.parse
 
 P = pathlib.Path(__file__).resolve().parent
 SRC, OUT, C = P / 'src', P / 'site', P / 'content'
@@ -133,7 +133,47 @@ NEWS = list(reversed(uniq(sorted(({'slug': slugify(d.get('url') or re.sub(r'^\d{
                                    'seo_title': str(d.get('seo_title') or '').strip(), 'seo_description': str(d.get('seo_description') or '').strip()}
                                   for d in entries('news')),
                                  key=lambda n: (n['date'], n['slug'])), what='Новость')))
-RESERVED = {'uslugi', 'sait', 'o-nas', 'voprosy', 'kontakty', 'novosti', 'dokumenty', 'brief', 'admin', 'img', 'js', 'fonts'}
+
+# кейсы — раздел «Кейсы» в админке (content/cases/*.json): площадки, цифры, график по месяцам, было → стало, скриншоты
+MP = {'wb': 'Wildberries', 'ozon': 'Ozon'}
+def mp_keys(v):
+    out = []
+    for x in (v if isinstance(v, list) else [v]):
+        x = str(x or '').strip().lower()
+        k = 'wb' if x in ('wb', 'wildberries', 'вб') else 'ozon' if x in ('ozon', 'озон') else ''
+        if k and k not in out:
+            out.append(k)
+    return out
+
+_AMOUNT = re.compile(r'(?<![\w.,])([-\u2212\u2013]?)(\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,](\d+))?(?:\s*(млрд|млн|тыс|k|к|m|м)(?![а-яёa-z]))?', re.I)
+_MULT = {'млрд': 1e9, 'млн': 1e6, 'м': 1e6, 'm': 1e6, 'тыс': 1e3, 'к': 1e3, 'k': 1e3}
+def to_num(x):
+    """Одно число из цифры или текста: 300000, «1 250 000 ₽», «1,2 млн», «300 тыс», «−5%».
+    Числа нет или их несколько («40 заказов в день за 2 мес») — None: лучше ничего не посчитать, чем посчитать неверно."""
+    if x is None or isinstance(x, bool):
+        return None
+    if isinstance(x, (int, float)):
+        return float(x) if math.isfinite(x) else None
+    found = list(_AMOUNT.finditer(str(x)))
+    if len(found) != 1:
+        return None
+    sign, whole, frac, unit = found[0].groups()
+    v = float(re.sub(r'\D', '', whole) + ('.' + frac if frac else '')) * _MULT.get((unit or '').lower(), 1)
+    return -v if sign else v
+
+CASES = list(reversed(uniq(sorted(({
+    'slug': slugify(d.get('url') or re.sub(r'^\d{4}-\d{2}-\d{2}-?', '', d['_file']) or d.get('title')),
+    'title': str(d.get('title') or 'Кейс'), 'date': str(d.get('date') or '')[:10], 'excerpt': str(d.get('excerpt') or ''),
+    'mp': mp_keys(d.get('marketplaces')), 'niche': str(d.get('niche') or '').strip(), 'period': str(d.get('period') or '').strip(),
+    'services': [x.strip() for x in (d.get('services') if isinstance(d.get('services'), list) else [d.get('services')]) if isinstance(x, str) and x.strip()],
+    'cover': str(d.get('cover') or ''), 'text': str(d.get('text') or ''), 'video': str(d.get('video') or ''),
+    'results': [{'value': str(r['value']).strip(), 'label': str(r.get('label') or '').strip()} for r in d.get('results') or []
+                if isinstance(r, dict) and r.get('value') is not None and str(r['value']).strip()],
+    'metrics': [m for m in d.get('metrics') or [] if isinstance(m, dict) and m.get('label')],
+    'chart': d.get('chart') if isinstance(d.get('chart'), dict) else {},
+    'shots': [x for x in d.get('screenshots') or [] if isinstance(x, dict) and x.get('image')]}
+    for d in entries('cases')), key=lambda c: (c['date'], c['slug'])), what='Кейс')))
+RESERVED = {'uslugi', 'sait', 'keysy', 'o-nas', 'voprosy', 'kontakty', 'novosti', 'dokumenty', 'brief', 'admin', 'img', 'js', 'fonts'}
 # у копии страницы (A/B) адрес остаётся за оригиналом: первым идёт файл, чьё имя совпадает с адресом
 PAGES = sorted((dict(p, slug=slugify(p.get('url') or p['_file'])) for p in entries('pages')), key=lambda p: (slugify(p['_file']) != p['slug'], p['_file']))
 PAGES = uniq(PAGES, taken=RESERVED, what='Страница')
@@ -453,7 +493,7 @@ def news_cards(items):
     for n in items:
         cover = ('<span class="nc-img"><img src="%s" alt="" loading="lazy" decoding="async"></span>' % esc(media(n['cover']))) if n['cover'] else \
                 '<span class="nc-img nc-ph">%s</span>' % ('{{icon:play}}' if n['video'] else '{{icon:newspaper}}')
-        out.append('<a class="news-card" href="{{base}}novosti/%s/" data-reveal data-kind="%s" data-topic="%s">%s<span class="nc-body">'
+        out.append('<a class="news-card" href="{{base}}novosti/%s/" data-reveal data-fi data-kind="|%s|" data-topic="|%s|">%s<span class="nc-body">'
                    '<span class="nc-meta"><time datetime="%s">%s</time><span class="nc-tag">%s</span></span><b>%s</b><span>%s</span></span></a>'
                    % (n['slug'], esc(n['kind']), esc(n['topic']), cover, esc(n['date']), ru_date(n['date']), esc(news_tag(n)), esc(n['title']), esc(n['excerpt'])))
     return '<div class="news-grid%s">' % (' news-one' if len(out) == 1 else '') + ''.join(out) + '</div>'
@@ -475,14 +515,212 @@ def news_list_html(items, ed=False, count=NEWS_MAX):
                    for k, n in enumerate(items))
     return '<ol class="nlist" data-reveal>%s</ol>' % rows
 
+def filter_bar(chips):
+    """Кнопки фильтра над карточками: (ключ:значение, подпись). У карточек — data-fi и data-<ключ>="|значение|…|"; работает в site.js."""
+    chips = [('', 'Все')] + chips
+    if len(chips) < 2:
+        return ''
+    return '<div class="nfilter" role="group" aria-label="Что показать">%s</div>' % ''.join(
+        '<button type="button" class="nf%s" data-nf="%s" aria-pressed="%s">%s</button>' % (' on' if not f else '', esc(f), 'true' if not f else 'false', esc(label)) for f, label in chips)
+
 def news_filters(items):
-    """Кнопки «Все / Новости / Статьи / рубрики» над карточками — только если есть из чего выбирать."""
+    """«Все / Новости / Статьи / рубрики» — только если есть из чего выбирать."""
     kinds = [k for k in ('Новость', 'Статья') if any(n['kind'] == k for n in items)]
     topics = sorted({n['topic'] for n in items if n['topic']})
-    chips = ['<button type="button" class="nf%s" data-nf="%s" aria-pressed="%s">%s</button>' % (' on' if not f else '', esc(f), 'true' if not f else 'false', esc(label))
-             for f, label in ([('', 'Все')] + ([('kind:Новость', 'Новости'), ('kind:Статья', 'Статьи')] if len(kinds) > 1 else [])
-                              + ([('topic:' + t, t) for t in topics] if len(topics) > 1 else []))]
-    return '<div class="nfilter" role="group" aria-label="Что показать">%s</div>' % ''.join(chips) if len(chips) > 1 else ''
+    return filter_bar(([('kind:Новость', 'Новости'), ('kind:Статья', 'Статьи')] if len(kinds) > 1 else []) + ([('topic:' + t, t) for t in topics] if len(topics) > 1 else []))
+
+# ---------- кейсы: график из цифр, карточки, страница кейса ----------
+def fmt_num(v):
+    """300000 → «300 тыс», 1250000 → «1,25 млн», 12.5 → «12,5» — для подписей графика."""
+    a = abs(v)
+    s, u = (('%.2f' % (v / 1e9), ' млрд') if a >= 999.5e6 else ('%.2f' % (v / 1e6), ' млн') if a >= 999.5e3 else
+            ('%.0f' % (v / 1e3), ' тыс') if a >= 1e4 else ('%.1f' % (v / 1e3), ' тыс') if a >= 1e3 else
+            ('%.0f' % v, '') if a >= 100 else ('%.1f' % v, '') if a >= 10 else ('%.2f' % v, ''))
+    if '.' in s:
+        s = s.rstrip('0').rstrip('.')
+    return s.replace('.', ',').replace('-', '\u2212') + u
+
+_MON_RE = re.compile(r'\b(?:январ|феврал|март|апрел|июн|июл|август|сентябр|октябр|ноябр|декабр)[а-яё]*|\bма[йя]\b', re.I)
+def short_label(s, size=12):
+    """Подпись месяца под осью: «Сентябрь 2026» → «Сен 2026»; совсем длинная — с многоточием (полная — во всплывающей подсказке)."""
+    s = str(s).strip()
+    if len(s) > 10:
+        s = _MON_RE.sub(lambda m: m.group(0)[:3], s)
+    return s if len(s) <= size else s[:size - 1].rstrip() + '…'
+
+def nice_top(m):
+    """Верх шкалы — круглое число чуть больше максимума."""
+    if m <= 0:
+        return 1.0
+    e = 10 ** math.floor(math.log10(m))
+    return next(f * e for f in (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10) if m <= f * e + 1e-9)
+
+CHART = {  # ширина, высота, поля слева, справа, сверху, снизу и сколько подписей месяцев (0 — маленький график на карточке, без осей)
+    # три размера под ширину экрана — подписи везде остаются читаемыми (11–15 px)
+    'lg': (740, 340, 64, 28, 32, 42, 10), 'md': (560, 300, 60, 24, 30, 40, 7), 'sm': (360, 280, 54, 18, 30, 40, 4),
+    'mini': (320, 200, 16, 16, 24, 20, 0)}
+MP_COLORS = {'wb': ('#CB11AB', '#7B1FC4'), 'ozon': ('#005BFF', '#005BFF')}
+MP_SOLID = {'wb': '#A116BE', 'ozon': '#005BFF'}  # мини-график на карточке — без градиентов: карточка может стоять на странице дважды
+
+def chart_series(c):
+    """Точки графика и линии площадок, у которых есть хотя бы две цифры."""
+    pts = [p for p in (c['chart'] or {}).get('points') or [] if isinstance(p, dict) and str(p.get('label') or '').strip()]
+    series = [(k, [to_num(p.get(k)) for p in pts]) for k in ('wb', 'ozon')]
+    return pts, [(k, vals) for k, vals in series if sum(v is not None for v in vals) >= 2]
+
+def chart_start(c, pts):
+    """С какого месяца работаем мы: галочка у месяца (или его подпись в поле start)."""
+    i = next((i for i, p in enumerate(pts) if p.get('start') is True), None)
+    s = str((c['chart'] or {}).get('start') or '').strip().lower()
+    if i is None and s:
+        i = next((i for i, p in enumerate(pts) if str(p['label']).strip().lower() == s), None)
+    return i
+
+def chart_svg(c, uid, size='lg'):
+    """Линии Wildberries (фирменный фиолетовый) и Ozon (синий) по точкам из админки; период «до нас» и отметка «Начали работу»."""
+    pts, series = chart_series(c)
+    if len(pts) < 2 or not series:
+        return ''
+    W, H, L, R, T, B, xn = CHART[size]
+    n, bottom = len(pts), H - B
+    vmax = max(v for _, vals in series for v in vals if v is not None)
+    if vmax <= 0:  # одни нули — показывать нечего
+        return ''
+    top = nice_top(vmax)
+    X = lambda i: L + (W - L - R) * i / (n - 1)
+    Y = lambda v: T + (bottom - T) * (1 - min(max(v, 0), top) / top)
+    used = [k for k, _ in series]
+    out = [] if not xn else ['<defs>'] + ['<linearGradient id="s%s-%s" gradientUnits="userSpaceOnUse" x1="%d" y1="0" x2="%d" y2="0"><stop offset="0" stop-color="%s"/><stop offset="1" stop-color="%s"/></linearGradient>'
+                        '<linearGradient id="f%s-%s" gradientUnits="userSpaceOnUse" x1="0" y1="%d" x2="0" y2="%d"><stop offset="0" stop-color="%s" stop-opacity=".22"/><stop offset="1" stop-color="%s" stop-opacity="0"/></linearGradient>'
+                        % (k, uid, L, W - R, c1, c2, k, uid, T, bottom, c2, c2) for k, (c1, c2) in MP_COLORS.items() if k in used] + ['</defs>']
+    si = chart_start(c, pts)
+    if si:  # до начала работы — чуть темнее
+        out.append('<rect class="pre" x="%d" y="%d" width="%.1f" height="%d"/>' % (L, T, X(si) - L, bottom - T))
+    if xn:
+        for k in range(5):
+            v = top * k / 4
+            out.append('<line class="gl" x1="%d" x2="%d" y1="%.1f" y2="%.1f"/><text class="yl" x="%d" y="%.1f">%s</text>' % (L, W - R, Y(v), Y(v), L - 8, Y(v) + 4, esc(fmt_num(v))))
+        step = max(1, math.ceil(n / xn))
+        xs = list(range(0, n, step))
+        if n - 1 - xs[-1] >= max(2, step // 2 + 1):  # последний месяц подписываем, если не налезает на соседнюю подпись
+            xs.append(n - 1)
+        out += ['<text class="xl" x="%.1f" y="%d">%s</text>' % (X(i), H - 14, esc(short_label(pts[i]['label']))) for i in xs]
+    if si is not None:
+        out.append('<line class="st" x1="%.1f" x2="%.1f" y1="%d" y2="%d"/>' % (X(si), X(si), T - (12 if xn else 0), bottom))
+        if xn:
+            right = si <= (n - 1) / 2
+            out.append('<text class="stl" x="%.1f" y="%d"%s>Начали работу</text>' % (X(si) + (6 if right else -6), T - 4, '' if right else ' text-anchor="end"'))
+    for k, vals in series:
+        dots = [(i, v) for i, v in enumerate(vals) if v is not None]  # пустой месяц не рвёт линию: соединяем соседние цифры
+        seg = [(X(i), Y(v)) for i, v in dots]
+        d = 'M' + ' L'.join('%.1f %.1f' % p for p in seg)
+        fill, stroke = ('url(#f%s-%s)' % (k, uid), 'url(#s%s-%s)' % (k, uid)) if xn else ('%s" fill-opacity=".14' % MP_SOLID[k], MP_SOLID[k])
+        out.append('<path class="ar" d="%s L%.1f %d L%.1f %d Z" fill="%s"/><path class="ln" d="%s" pathLength="1" stroke="%s"/>'
+                   % (d, seg[-1][0], bottom, seg[0][0], bottom, fill, d, stroke))
+        if xn:
+            out += ['<circle class="pt pt-%s" cx="%.1f" cy="%.1f" r="4"><title>%s, %s: %s</title></circle>' % (k, X(i), Y(v), MP[k], esc(str(pts[i]['label']).strip()), esc(fmt_num(v)))
+                    for i, v in dots]
+        else:
+            out.append('<circle class="pt pt-%s" cx="%.1f" cy="%.1f" r="5"/>' % (k, X(dots[-1][0]), Y(dots[-1][1])))
+    if not xn:  # на карточке график — картинка к заголовку, читать его отдельно не нужно
+        return '<svg class="cchart cchart-mini" viewBox="0 0 %d %d" aria-hidden="true" focusable="false">%s</svg>' % (W, H, ''.join(out))
+    vals_of = lambda vals: [v for v in vals if v is not None]
+    label = '%s: %s' % (str((c['chart'] or {}).get('title') or 'Динамика продаж'),
+                        '; '.join('%s — с %s до %s' % (MP[k], fmt_num(vals_of(vals)[0]), fmt_num(vals_of(vals)[-1])) for k, vals in series))
+    return '<svg class="cchart cchart-%s" viewBox="0 0 %d %d" role="img" aria-label="%s" focusable="false">%s</svg>' % (size, W, H, esc(label), ''.join(out))
+
+def chart_block(c):
+    """График на странице кейса: заголовок и легенда, два размера (компьютер и телефон) и таблица цифр для экранного чтеца."""
+    uid = 'c-' + c['slug']
+    big = chart_svg(c, uid)
+    if not big:
+        return ''
+    pts, series = chart_series(c)
+    title = str((c['chart'] or {}).get('title') or 'Динамика продаж')
+    rows = ''.join('<tr><th scope="row">%s</th>%s</tr>' % (esc(str(p['label']).strip()), ''.join('<td>%s</td>' % (esc(fmt_num(vals[i])) if vals[i] is not None else '—') for _, vals in series))
+                   for i, p in enumerate(pts))
+    table = '<table class="visually-hidden"><caption>%s</caption><tr><th scope="col">Месяц</th>%s</tr>%s</table>' % (esc(title), ''.join('<th scope="col">%s</th>' % MP[k] for k, _ in series), rows)
+    return ('<figure class="cchart-box" data-reveal><figcaption><b>%s</b><span class="cc-legend">%s</span></figcaption>%s%s%s</figure>'
+            % (esc(title), ''.join('<span class="lg lg-%s">%s</span>' % (k, MP[k]) for k, _ in series), big,
+               chart_svg(c, uid + '-m', 'md') + chart_svg(c, uid + '-s', 'sm'), table))
+
+def mp_badges(c):
+    return ''.join('<span class="mpb mpb-%s">%s</span>' % (k, MP[k]) for k in c['mp'])
+
+def growth(before, after, label=''):
+    """Было 300 000 → стало 1 200 000: «×4»; 100 → 140: «+40%». Позицию и место не считаем: там меньше — значит лучше."""
+    if re.search(r'топ|позиц|мест', '%s %s %s' % (label, before, after), re.I):
+        return ''
+    b, a = to_num(before), to_num(after)
+    if b is None or a is None or b <= 0:
+        return ''
+    r = a / b
+    if r >= 2:
+        return '×' + ('%.1f' % r).rstrip('0').rstrip('.').replace('.', ',')
+    p = (r - 1) * 100
+    return ('+' if p >= 0 else '−') + '%.0f%%' % abs(p)
+
+def case_card(c, k=0, ed=False, hide=False):
+    """Карточка кейса: мини-график (нет графика — обложка), площадки, ниша, заголовок и главная цифра."""
+    viz = chart_svg(c, 'm-' + c['slug'], 'mini')
+    pic = ('<span class="cc-viz">%s</span>' % viz if viz else
+           '<span class="cc-img"><img src="%s" alt="" loading="lazy" decoding="async"></span>' % esc(media(c['cover'])) if c['cover'] else
+           '<span class="cc-img cc-ph">{{icon:chart-line-up}}</span>')
+    big = c['results'][0] if c['results'] else None
+    return ('<a class="case-card" href="{{base}}keysy/%s/" data-reveal data-fi data-mp="|%s|" data-svc="|%s|"%s%s>%s<span class="cc-body">'
+            '<span class="cc-tags">%s%s</span><b class="cc-title">%s</b>%s</span></a>'
+            % (c['slug'], '|'.join(c['mp']), '|'.join(esc(s) for s in c['services']),
+               ' data-cap="%d"' % k if ed else '', ' hidden' if hide else '', pic, mp_badges(c),
+               '<span class="cc-niche">%s</span>' % esc(c['niche']) if c['niche'] else '', esc(c['title']),
+               '<span class="cc-res"><strong>%s</strong><span>%s</span></span>' % (esc(big['value']), esc(big.get('label') or '')) if big else
+               '<span class="cc-ex">%s</span>' % esc(c['excerpt']) if c['excerpt'] else ''))
+
+def case_filters(items):
+    mps = [k for k in ('wb', 'ozon') if any(k in c['mp'] for c in items)]
+    svcs = [s for s in SERVICES if any(s['slug'] in c['services'] for c in items)]
+    return filter_bar(([('mp:' + k, MP[k]) for k in mps] if len(mps) > 1 else []) + ([('svc:' + s['slug'], s['title']) for s in svcs] if len(svcs) > 1 else []))
+
+def cell(x):
+    return esc(str(x).strip()) if x is not None and str(x).strip() else '—'
+
+def case_page(c):
+    nums = ''.join('<li><b>%s</b><span>%s</span></li>' % (esc(r.get('value', '')), esc(r.get('label', ''))) for r in c['results'])
+    metrics = ''.join('<tr><th scope="row">%s</th><td>%s</td><td>%s</td><td class="mg">%s</td></tr>'
+                      % (esc(m.get('label', '')), cell(m.get('before')), cell(m.get('after')),
+                         esc(str(m.get('change') or '').strip() or growth(m.get('before'), m.get('after'), m.get('label', '')))) for m in c['metrics'])
+    shots = ''.join('<figure class="shot"><a href="%s" target="_blank" rel="noopener"><img src="%s" alt="%s" loading="lazy" decoding="async"></a>%s</figure>'
+                    % (esc(media(s['image'])), esc(media(s['image'])), esc(s.get('caption') or 'Скриншот из кабинета'), '<figcaption>%s</figcaption>' % esc(s['caption']) if s.get('caption') else '')
+                    for s in c['shots'])
+    svc_links = ''.join('<a class="chip" href="%s">%s</a>' % ('{{base}}sait/' if s == 'sait' else '{{base}}uslugi/%s/' % s, esc(BY_SLUG[s]['title'])) for s in c['services'] if s in BY_SLUG)
+    more = [x for x in CASES if x['slug'] != c['slug']][:3]
+    body = ''.join(x for x in (
+        '<figure class="case-cover"><img src="%s" alt="" decoding="async"></figure>' % esc(media(c['cover'])) if c['cover'] else '',
+        '<ul class="case-nums case-nums-lg" data-reveal>%s</ul>' % nums if nums else '',
+        chart_block(c),
+        '<div class="mtable" data-reveal><table><thead><tr><th scope="col">Показатель</th><th scope="col">Было</th><th scope="col">Стало</th><th scope="col">Изменение</th></tr></thead><tbody>%s</tbody></table></div>' % metrics if metrics else '',
+        '<div class="card case-story" data-reveal><h2 class="heading-5">Что сделали</h2><div class="prose">%s</div></div>' % md(c['text']) if c['text'].strip() else '',
+        '<div class="case-shots" data-reveal><h2 class="heading-5">Скриншоты из кабинета</h2><div class="shots">%s</div></div>' % shots if shots else '',
+        '<div class="video-box" data-reveal>%s</div>' % video_html(c['video'], c['cover']) if c['video'] else '',
+        '<div class="case-svcs" data-reveal><span>Услуги в этом кейсе:</span>%s</div>' % svc_links if svc_links else ''))
+    return ('<section class="phero">{{phero-bg}}<div class="wrap narrow">%s<div class="np-meta">%s%s%s</div><h1 class="heading-2 grad">%s</h1>%s</div></section>'
+            % (crumbs(('Кейсы', '{{base}}keysy/'), (c['title'], None)), ''.join('<span class="chip mpc mpc-%s">%s</span>' % (k, MP[k]) for k in c['mp']),
+               '<span class="chip">%s</span>' % esc(c['niche']) if c['niche'] else '', '<span class="chip">%s</span>' % esc(c['period']) if c['period'] else '',
+               esc(c['title']), '<p class="lead">%s</p>' % esc(c['excerpt']) if c['excerpt'] else '')
+            + '<section class="sec sec-tight"><div class="wrap narrow"><div class="case-page">%s</div>'
+              '<a class="link-arrow link-acc" href="{{base}}keysy/" style="margin-top:40px"><span class="flip">{{icon:arrow-right}}</span><span>Все кейсы</span></a></div></section>' % body
+            + ('<section class="sec" style="padding-top:0"><div class="wrap"><h2 class="heading-5">Другие кейсы</h2><div class="case-grid" style="margin-top:24px">%s</div></div></section>'
+               % ''.join(case_card(x, k) for k, x in enumerate(more)) if more else '')
+            + cta_band('Хотите такой же результат?', 'Разберём ваш магазин на бесплатной консультации и покажем, где точки роста.'))
+
+def svc_cases_html(s):
+    """Кейсы на странице услуги: из раздела «Кейсы» (с этой услугой) и старые — из самой услуги."""
+    own = [c for c in CASES if s['slug'] in c['services']]
+    legacy = [c for c in (s.get('cases') or []) if c.get('title')]
+    if not own:
+        return cases_html(s)
+    return ('<div class="case-grid">%s</div>' % ''.join(case_card(c, k) for k, c in enumerate(own[:6]))
+            + ('<a class="link-arrow link-acc" href="{{base}}keysy/" style="margin-top:24px"><span>Все кейсы</span>{{icon:arrow-right}}</a>' if len(own) > 6 else '')
+            + ('<div style="margin-top:24px">%s</div>' % cases_html(s) if legacy else ''))
 
 def hero_title(raw):
     t = esc(raw or '')
@@ -572,7 +810,7 @@ def service_body(s):
         '<p>Бесплатная онлайн-встреча с аналитиком: разберём магазин и подскажем, с чего начать.</p><div class="aside-price">Стоимость %s</div>' % price_html(s) +
         lead % (' btn-shine', slug, slug, 'Записаться на консультацию') + '<a class="tel" href="tel:{{phone_href}}">{{icon:phone}}{{phone}}</a></aside></div>'
         '<div class="sec-head" style="margin-top:80px" data-reveal><span class="chip">Кейсы</span><h2 class="heading-3" style="margin-top:16px">Результаты по услуге «%s»</h2></div>' % esc(s['title']) +
-        '<div style="margin-top:32px">' + cases_html(s) + '</div>'
+        '<div style="margin-top:32px">' + svc_cases_html(s) + '</div>'
         '<h2 class="heading-5" style="margin-top:64px">Другие услуги</h2><div class="others">' + others + '</div></div></section>' + cta_band())
 
 # «Сайт для селлера» — своя страница sait/: цена и кейсы из админки показываются на ней, только когда заполнены
@@ -755,16 +993,40 @@ def blk_portfolio(b, d, ed):
                ea(ed, 'title', fb=PORTFOLIO[1]), esc(d.get('title') or PORTFOLIO[1]), ea(ed, 'text', fb=PORTFOLIO[2]), esc(d.get('text') or PORTFOLIO[2])))
 
 def blk_cases(b, d, ed):
-    """Кейсы услуги из «Разделов»; пока их нет — на сайте блока нет, в конструкторе видна заглушка."""
+    """Кейсы одной услуги: из раздела «Кейсы» (где отмечена услуга) и простые — из самой услуги; пока их нет — на сайте блока нет, в конструкторе заглушка."""
     s = BY_SLUG.get(d.get('service') or 'sait')
-    if s and [c for c in (s.get('cases') or []) if c.get('title')]:
+    if s and (any(s['slug'] in c['services'] for c in CASES) or [c for c in (s.get('cases') or []) if c.get('title')]):
         return ('<section class="sec" aria-labelledby="%s"><div class="wrap"><div class="sec-head" data-reveal><span class="chip">Кейсы</span>'
                 '<h2 class="heading-2" id="%s">Результаты по услуге «%s»</h2></div><div style="margin-top:40px">%s</div></div></section>'
-                % (hid(b, 'scase-h'), hid(b, 'scase-h'), esc(s['title']), cases_html(s)))
+                % (hid(b, 'scase-h'), hid(b, 'scase-h'), esc(s['title']), svc_cases_html(s)))
     if ed:
         return ('<section class="sec sec-tight" aria-label="Кейсы"><div class="wrap"><div class="empty">{{icon:chart-line-up}}'
-                '<p>Кейсы услуги «%s» появятся здесь, когда их добавят в «Разделах»: «Услуги, цены и кейсы».</p></div></div></section>' % esc(s['title'] if s else ''))
+                '<p>Кейсы услуги «%s» появятся здесь, когда их добавят в «Разделах»: «Кейсы» (в кейсе отметьте эту услугу).</p></div></div></section>' % esc(s['title'] if s else ''))
     return ''
+
+CASES_MAX = 9  # на главной — последние 3, 6 или 9 кейсов
+def cases_count(d):
+    try:
+        return max(3, min(CASES_MAX, int(d.get('count') or 3)))
+    except (TypeError, ValueError):
+        return 3
+
+def blk_cases_feed(b, d, ed):
+    """Последние кейсы с мини-графиками и ссылкой «Все кейсы»; пока кейсов нет — на сайте блока нет, в конструкторе заглушка."""
+    if not CASES:
+        return ('<section class="sec sec-tight" aria-label="Кейсы"><div class="wrap"><div class="empty">{{icon:chart-line-up}}<p>Здесь появятся последние кейсы '
+                'с графиками продаж, когда их добавят в «Разделах»: «Кейсы». Пока кейсов нет, на сайте этого блока не видно.</p></div></div></section>') if ed else ''
+    n = cases_count(d)
+    return ('<section class="sec" aria-labelledby="%s"><div class="wrap">%s<div class="case-grid" style="margin-top:40px">%s</div></div></section>'
+            % (hid(b, 'cases-h'), head_html(b, d, ed, 'cases-h', 'Кейсы', 'Результаты наших клиентов', link=('{{base}}keysy/', 'Все кейсы')),
+               ''.join(case_card(c, k, ed, k >= n) for k, c in enumerate(CASES[:CASES_MAX if ed else n]))))
+
+def blk_cases_list(b, d, ed):
+    if not CASES:
+        return ('<section class="sec sec-tight" aria-label="Кейсы"><div class="wrap"><div class="empty empty-cases"><span class="sk" aria-hidden="true"><i></i><i></i><i></i></span>'
+                '{{icon:chart-line-up}}<p>Скоро здесь появятся кейсы: графики продаж на Wildberries и Ozon, цифры до и после и что мы сделали.</p></div></div></section>')
+    return ('<section class="sec sec-tight" aria-label="Все кейсы"><div class="wrap">%s<div class="case-grid">%s</div></div></section>'
+            % (case_filters(CASES), ''.join(case_card(c, k) for k, c in enumerate(CASES))))
 
 def blk_news_list(b, d, ed):
     return '<section class="sec sec-tight" aria-label="Все новости и статьи"><div class="wrap">%s%s</div></section>' % (news_filters(NEWS), news_cards(NEWS))
@@ -827,6 +1089,8 @@ BLOCKS = {  # тип → (название в конструкторе, что �
     'why': ('Почему мы', 'Карточки с иконками', blk_why),
     'founder': ('Основатель', 'Фото, имя и достижения', blk_founder),
     'portfolio': ('Наши сайты', 'Работающий магазин и демо-сайты', blk_portfolio),
+    'cases-feed': ('Кейсы', 'Последние кейсы с графиками продаж: 3, 6 или 9', blk_cases_feed),
+    'cases-list': ('Все кейсы', 'Карточки всех кейсов с фильтром по площадкам и услугам', blk_cases_list),
     'cases': ('Кейсы услуги', 'Кейсы «Сайта для селлера» из «Разделов»', blk_cases),
     'news': ('Новости и статьи', 'Список заголовков последних материалов, от 3 до 6', blk_news),
     'news-list': ('Все новости', 'Карточки всех новостей', blk_news_list),
@@ -847,17 +1111,19 @@ BLOCK_DEFAULTS = {  # с чем появляется новый блок из с
     'features': {'chip': 'Что вы получите', 'title': 'Заголовок блока', 'items': [{'icon': i, 'title': t, 'text': x} for i, t, x in SAIT_FEATS[:3]]},
     'why': {'chip': 'Почему мы', 'title': 'За вашим магазином — целая команда', 'items': (TX.get('o_nas') or {}).get('why') or [{'icon': 'seal-check', 'text': 'Чем вы сильны'}]},
     'news': {'chip': 'Новости', 'title': 'Новости и статьи'},
+    'cases-feed': {'chip': 'Кейсы', 'title': 'Результаты наших клиентов', 'count': 3},
     'cases': {'service': 'sait'},
     'contact': {'items': (TX.get('kontakty') or {}).get('meeting') or ['Онлайн-встреча в удобное для вас время']},
 }
 
 BLOCK_OPTIONS = {  # настройки блока в панели конструктора; cap — сколько пунктов показывать (лишние в конструкторе прячутся сразу)
     'news': [{'key': 'count', 'label': 'Сколько материалов показывать', 'values': [3, 4, 5, 6], 'default': NEWS_MAX, 'cap': True}],
+    'cases-feed': [{'key': 'count', 'label': 'Сколько кейсов показывать', 'values': [3, 6, 9], 'default': 3, 'cap': True}],
 }
 
 # страницы сайта, которые собираются из блоков: ключ (имя файла content/site/<ключ>.json), адрес, подпись в «хлебных крошках», название в конструкторе
 PAGE_KEYS = [('home', '', None, 'Главная'), ('uslugi', 'uslugi/', 'Услуги', 'Услуги'), ('sait', 'sait/', 'Сайт для селлера', 'Сайт для селлера'),
-             ('o-nas', 'o-nas/', 'О компании', 'О компании'), ('voprosy', 'voprosy/', 'Вопросы', 'Вопросы'), ('kontakty', 'kontakty/', 'Контакты', 'Контакты'),
+             ('keysy', 'keysy/', 'Кейсы', 'Кейсы'), ('o-nas', 'o-nas/', 'О компании', 'О компании'), ('voprosy', 'voprosy/', 'Вопросы', 'Вопросы'), ('kontakty', 'kontakty/', 'Контакты', 'Контакты'),
              ('novosti', 'novosti/', 'Новости', 'Новости')]
 
 def default_page(key):
@@ -878,6 +1144,8 @@ def default_page(key):
         'voprosy': [ph('Вопрос — ответ', 'voprosy'), ('faq-page', {})],
         'kontakty': [ph('Бесплатно и без обязательств', 'kontakty', accent=True), ('contact', {'items': T('kontakty').get('meeting') or []})],
         'novosti': [ph('Новости', 'novosti'), ('news-list', {}), ('cta', {})],
+        'keysy': [('phero', {'chip': 'Кейсы', 'title': 'Результаты наших клиентов',
+                             'lead': 'Графики продаж на Wildberries и Ozon, цифры до и после и что мы сделали для каждого магазина.'}), ('cases-list', {}), ('cta', {})],
     }
     return {'title': {k: t for k, _, _, t in PAGE_KEYS}[key], 'blocks': [{'id': t, 'type': t, 'data': d, 'style': {}} for t, d in pages[key]]}
 
@@ -978,8 +1246,8 @@ def tokens(text):
     assert not left, left
     return text
 
-NAV = [('uslugi', 'uslugi/', 'Услуги'), ('novosti', 'novosti/', 'Новости'), ('o-nas', 'o-nas/', 'О компании'),
-       ('voprosy', 'voprosy/', 'Вопросы'), ('kontakty', 'kontakty/', 'Контакты')]
+NAV = [('uslugi', 'uslugi/', 'Услуги')] + ([('keysy', 'keysy/', 'Кейсы')] if CASES else []) + [  # «Кейсы» в меню — когда появится первый кейс
+       ('novosti', 'novosti/', 'Новости'), ('o-nas', 'o-nas/', 'О компании'), ('voprosy', 'voprosy/', 'Вопросы'), ('kontakty', 'kontakty/', 'Контакты')]
 LAYOUT = (SRC / 'layout.html').read_text(encoding='utf-8')
 WIDGETS = (SRC / 'pages' / 'widgets.html').read_text(encoding='utf-8')
 STICKY = '<div class="sticky-cta"><a class="btn btn-primary" href="{{base}}kontakty/" data-lead><span>Бесплатная консультация</span>{{icon:arrow-right}}</a></div>'
@@ -1082,6 +1350,7 @@ PAGE_META = {  # заголовок вкладки, описание для по
     'voprosy': ('Частые вопросы — %s' % COMPANY, 'Ответы о работе с Wildberries и Ozon, оплате и рекламе.', {'head': FAQ_LD}),
     'kontakty': ('Бесплатная консультация — %s' % COMPANY, 'Запишитесь на бесплатную онлайн-встречу с аналитиком маркетплейсов.', {'sticky': False, 'scripts': ('voice', 'site')}),
     'novosti': ('Новости — %s' % COMPANY, None, {}),
+    'keysy': ('Кейсы — %s' % COMPANY, 'Кейсы селлеров Wildberries и Ozon: графики продаж, цифры до и после и что мы сделали для магазина.', {'noindex': not CASES}),
 }
 def render_page(key, ed=False):
     CTX['crumb'] = CRUMB[key]
@@ -1148,6 +1417,8 @@ PAGES_OUT = [(url, site_page(key)) for key, url, _, _ in PAGE_KEYS] + [
 ] + [('uslugi/%s/' % s['slug'], page('uslugi', '%s — %s' % (s['title'], COMPANY), s.get('short', ''), fill(service_body(s)))) for s in SERVICES if s['slug'] != 'sait'] \
   + [('novosti/%s/' % n['slug'], page('novosti', '%s — %s' % (n['seo_title'] or n['title'], COMPANY), n['seo_description'] or n['excerpt'] or n['title'],
                                        fill(news_post(n)), head=article_ld(n), og_type='article', og_image=abs_url(media(n['cover'])) if n['cover'] else None)) for n in NEWS] \
+  + [('keysy/%s/' % c['slug'], page('keysy', '%s — %s' % (c['title'], COMPANY), c['excerpt'] or c['title'], fill(case_page(c)),
+                                     og_image=abs_url(media(c['cover'])) if c['cover'] else None)) for c in CASES] \
   + [('dokumenty/%s/' % d['slug'], page('dokumenty', '%s — %s' % (d['title'], COMPANY), d['title'], fill(doc_page(d)), sticky=False)) for d in DOCS] \
   + [('%s/' % p['slug'], page(p['slug'], '%s — %s' % (p.get('title') or p['slug'], COMPANY), p.get('description', ''), fill(''.join(block_html(b) for b in p.get('blocks') or []))))
      for p in PAGES]
@@ -1166,7 +1437,8 @@ for sub in ('img/uploads', 'admin'):
         shutil.copytree(SRC / sub, OUT / sub)
 for _f in list((OUT / 'admin').glob('*.yml')) + list((OUT / 'admin').glob('*.html')) if (OUT / 'admin').exists() else []:
     # адрес сайта и версия файлов — от текущей сборки (остальные {{…}} в config.yml — шаблоны самой админки)
-    _f.write_text(_f.read_text(encoding='utf-8').replace('{{base}}', BASE).replace('{{site}}', SITE).replace('{{ver}}', VER), encoding='utf-8')
+    _f.write_text(_f.read_text(encoding='utf-8').replace('{{base}}', BASE).replace('{{site}}', SITE).replace('{{ver}}', VER)
+                  .replace("'{{service_options}}'", json.dumps([{'label': s['title'], 'value': s['slug']} for s in SERVICES], ensure_ascii=False)), encoding='utf-8')
 (OUT / 'js').mkdir()
 for name in ('site', 'voice', 'brief'):
     (OUT / 'js' / (name + '.js')).write_text(tokens((SRC / 'js' / (name + '.js')).read_text(encoding='utf-8')), encoding='utf-8')
@@ -1203,11 +1475,12 @@ brief = tokens((SRC / 'brief' / 'index.html').read_text(encoding='utf-8')).repla
 (OUT / 'brief').mkdir()
 (OUT / 'brief' / 'index.html').write_text(brief, encoding='utf-8')
 (OUT / 'favicon.svg').write_text(MARK.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ', 1).replace(' aria-hidden="true" focusable="false"', ''), encoding='utf-8')
-_lastmod = {'novosti/%s/' % n['slug']: n['date'] for n in NEWS if re.fullmatch(r'\d{4}-\d{2}-\d{2}', n['date'])}
+_lastmod = dict([('novosti/%s/' % n['slug'], n['date']) for n in NEWS] + [('keysy/%s/' % c['slug'], c['date']) for c in CASES])
+_lastmod = {p: d for p, d in _lastmod.items() if re.fullmatch(r'\d{4}-\d{2}-\d{2}', d)}
 (OUT / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n%s\n</urlset>\n' % '\n'.join(
-    '<url><loc>%s</loc>%s</url>' % (esc(SITE + p), '<lastmod>%s</lastmod>' % _lastmod[p] if p in _lastmod else '') for p, _ in PAGES_OUT), encoding='utf-8')
+    '<url><loc>%s</loc>%s</url>' % (esc(SITE + p), '<lastmod>%s</lastmod>' % _lastmod[p] if p in _lastmod else '') for p, _ in PAGES_OUT if CASES or p != 'keysy/'), encoding='utf-8')
 (OUT / 'robots.txt').write_text('User-agent: *\n%s\n' % ('Allow: /\nSitemap: %ssitemap.xml' % SITE if INDEX else 'Disallow: /'), encoding='utf-8')
 (OUT / '.nojekyll').write_text('', encoding='utf-8')
 sizes = sorted(((p.stat().st_size, str(p.relative_to(OUT))) for p in OUT.rglob('index.html')), reverse=True)
-print('built', VER, '→', OUT, '| страниц:', len(PAGES_OUT) + 2, '| новостей:', len(NEWS), '| документов:', len(DOCS), '| своих страниц:', len(PAGES),
+print('built', VER, '→', OUT, '| страниц:', len(PAGES_OUT) + 2, '| новостей:', len(NEWS), '| кейсов:', len(CASES), '| документов:', len(DOCS), '| своих страниц:', len(PAGES),
       '| самая тяжёлая:', sizes[0][1], sizes[0][0] // 1024, 'КБ | CSS:', len(CSS) // 1024, 'КБ')
